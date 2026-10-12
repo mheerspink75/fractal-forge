@@ -137,28 +137,45 @@ const GL = (() => {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
   }
 
-  function compile(type, source) {
+  function compile(type, source, name) {
     const shader = gl.createShader(type);
     gl.shaderSource(shader, source);
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
       const log = gl.getShaderInfoLog(shader);
       gl.deleteShader(shader);
-      throw new Error('Shader compile error: ' + log + '\n\n' + source);
+      // Keep the full source + diagnostics in the console; surface a concise message.
+      console.error('[FRACTAL FORGE] Shader compile failed (' + name + '):\n' + log + '\n\n' + source);
+      const first = log ? log.split('\n')[0].trim() : 'unknown error';
+      throw new Error('Shader compile failed: ' + name + ' — ' + first);
     }
     return shader;
   }
 
   // Create a program from vertex + fragment source, cache uniform locations.
-  function createProgram(vsSource, fsSource) {
-    const vs = compile(gl.VERTEX_SHADER, vsSource);
-    const fs = compile(gl.FRAGMENT_SHADER, fsSource);
-    const program = gl.createProgram();
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      throw new Error('Program link error: ' + gl.getProgramInfoLog(program));
+  // `name` is used in diagnostics so failures are attributable to a specific pass.
+  function createProgram(vsSource, fsSource, name) {
+    const label = name || 'program';
+    let vs = null, fs = null, program = null;
+    try {
+      vs = compile(gl.VERTEX_SHADER, vsSource, label + ':vertex');
+      fs = compile(gl.FRAGMENT_SHADER, fsSource, label + ':fragment');
+      program = gl.createProgram();
+      gl.attachShader(program, vs);
+      gl.attachShader(program, fs);
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        const log = gl.getProgramInfoLog(program);
+        console.error('[FRACTAL FORGE] Program link failed (' + label + '):\n' + log);
+        const first = log ? log.split('\n')[0].trim() : 'unknown error';
+        throw new Error('Program link failed: ' + label + ' — ' + first);
+      }
+    } catch (e) {
+      // Clean up any partially-created objects before rethrowing.
+      if (vs) gl.deleteShader(vs);
+      if (fs) gl.deleteShader(fs);
+      if (program) gl.deleteProgram(program);
+      throw e;
     }
     gl.deleteShader(vs);
     gl.deleteShader(fs);
@@ -186,6 +203,17 @@ const GL = (() => {
     const fbo = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+
+    // Validate completeness before the framebuffer is ever used for rendering.
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    if (status !== gl.FRAMEBUFFER_COMPLETE) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.deleteTexture(texture);
+      gl.deleteFramebuffer(fbo);
+      console.error('[FRACTAL FORGE] Incomplete framebuffer (' + width + 'x' + height + '): 0x' + status.toString(16));
+      throw new Error('Failed to create a complete ' + width + 'x' + height + ' framebuffer (status 0x' + status.toString(16) + ').');
+    }
+
     gl.viewport(0, 0, width, height);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -200,13 +228,16 @@ const GL = (() => {
   }
 
   // Bind a program, draw the fullscreen quad.
+  // The quad buffer is a 4-vertex triangle strip covering clip space [-1,1];
+  // it must be drawn as a TRIANGLE_STRIP (not TRIANGLES) or only one triangle
+  // (half the viewport) is rasterized.
   function draw(programObj) {
     gl.useProgram(programObj.program);
     gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
     const loc = gl.getAttribLocation(programObj.program, 'a_pos');
     gl.enableVertexAttribArray(loc);
     gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    gl.drawArrays(gl.TRIANGLES, 0, 4);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
   // Render a program to a target FBO (or null = default framebuffer / screen).
@@ -548,16 +579,20 @@ const Shaders = (() => {
       vec3 z = pos;
       float dr = 1.0;
       float r = 0.0;
+      const float EPS = 1e-6;
       for (int i = 0; i < 12; i++) {
         r = length(z);
         if (r > 2.0) break;
+        if (r < EPS) r = EPS;   // guard division by zero and log(0)
         float theta = acos(clamp(z.z / r, -1.0, 1.0)) * u_power;
         float phi = atan(z.y, z.x) * u_power;
         float zr = pow(r, u_power);
         dr = pow(r, u_power - 1.0) * u_power * dr + 1.0;
         z = zr * vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)) + pos;
       }
-      return 0.5 * log(r) * r * dr;
+      r = max(r, EPS);
+      dr = max(dr, EPS);
+      return 0.5 * log(r) * r / dr;
     }
 
     void main() {
@@ -574,7 +609,8 @@ const Shaders = (() => {
       for (int i = 0; i < 160; i++) {
         pos = ro + rd * t;
         dist = mandelbulbDE(pos);
-        t += dist * 0.85;
+        if (dist < 0.0) dist = 0.0;   // guard against negative/NaN estimates
+        t += min(dist, 0.5) * 0.85;  // cap the step to avoid tunneling
         if (t > 24.0 || dist < 0.0006) break;
       }
 
@@ -868,14 +904,26 @@ const Engine = (() => {
 
   function getProgram(name) {
     if (!programCache[name]) {
-      programCache[name] = GL.createProgram(Shaders.VERTEX, SHADER_MAP[name]);
+      const src = SHADER_MAP[name];
+      if (!src) throw new Error('Unknown fractal shader: ' + name);
+      programCache[name] = GL.createProgram(Shaders.VERTEX, src, name);
     }
     return programCache[name];
   }
 
   function getPostProgram(name) {
-    const src = { BRIGHT_PASS: Shaders.BRIGHT_PASS, BLUR: Shaders.BLUR, COMPOSITE: Shaders.COMPOSITE, TEXTURE_DISPLAY: Shaders.TEXTURE_DISPLAY }[name];
-    if (!programCache[name]) programCache[name] = GL.createProgram(Shaders.VERTEX, src);
+    const map = {
+      BRIGHT_PASS: Shaders.BRIGHT_PASS,
+      BLUR: Shaders.BLUR,
+      COMPOSITE: Shaders.COMPOSITE,
+      FEEDBACK: Shaders.FEEDBACK,
+      TEXTURE_DISPLAY: Shaders.TEXTURE_DISPLAY,
+    };
+    if (!programCache[name]) {
+      const src = map[name];
+      if (!src) throw new Error('Unknown post-processing shader: ' + name);
+      programCache[name] = GL.createProgram(Shaders.VERTEX, src, name);
+    }
     return programCache[name];
   }
 
