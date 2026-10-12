@@ -64,6 +64,9 @@
       <button class="btn btn-ghost" id="btn-gallery" title="Gallery (G)">
         <span class="ico" aria-hidden="true">▤</span><span class="lbl">Gallery</span>
       </button>
+      <button class="btn btn-primary" id="btn-save" title="Save artwork">
+        <span class="ico" aria-hidden="true">✚</span><span class="lbl">Save</span>
+      </button>
       <button class="btn btn-ghost" id="btn-audio" title="Audio reactive (A)" aria-pressed="false">
         <span class="ico" aria-hidden="true">♪</span><span class="lbl">Audio</span>
       </button>
@@ -196,7 +199,43 @@
       </div>
       <div class="modal-body">
         <div class="gallery-grid" id="gallery-grid"></div>
-        <p class="empty-state" id="gallery-empty">No saved artworks yet. Press <kbd>Save</kbd> on any world to keep it here.</p>
+        <p class="empty-state" id="gallery-empty">No saved artworks yet. Use the <b>Save</b> button to keep a world here.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modal-save" hidden>
+    <div class="modal modal-narrow" role="dialog" aria-modal="true" aria-labelledby="save-title">
+      <div class="modal-head">
+        <h2 id="save-title">Save artwork</h2>
+        <button class="modal-close" data-close="modal-save" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="field" for="save-name">
+          <span class="field-label">Name</span>
+          <input type="text" id="save-name" class="text-input" maxlength="60" autocomplete="off" />
+        </label>
+        <p class="modal-sub">Saved locally in your browser with a thumbnail and the full parameter set.</p>
+      </div>
+      <div class="modal-actions-row">
+        <button class="btn btn-ghost" id="btn-save-cancel">Cancel</button>
+        <button class="btn btn-primary" id="btn-save-confirm">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modal-confirm" hidden>
+    <div class="modal modal-narrow" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-desc">
+      <div class="modal-head">
+        <h2 id="confirm-title">Delete artwork?</h2>
+        <button class="modal-close" data-close="modal-confirm" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-desc">This permanently removes the artwork from your local gallery.</p>
+      </div>
+      <div class="modal-actions-row">
+        <button class="btn btn-ghost" id="btn-confirm-cancel">Cancel</button>
+        <button class="btn btn-danger" id="btn-confirm-ok">Delete</button>
       </div>
     </div>
   </div>

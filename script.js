@@ -1724,22 +1724,29 @@ const Exporter = (() => {
    ============================================================ */
 const Gallery = (() => {
   const KEY = 'fractal-forge:gallery';
+  const SCHEMA_VERSION = 1;
   const THUMB_W = 384, THUMB_H = 216;
 
   function load() {
     try {
       const raw = localStorage.getItem(KEY);
-      const arr = raw ? JSON.parse(raw) : [];
-      return Array.isArray(arr) ? arr : [];
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      // Support both the legacy bare-array format and the versioned envelope.
+      const arr = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.items) ? parsed.items : []);
+      return arr.filter((it) => it && typeof it === 'object' && it.id);
     } catch (e) {
       return [];
     }
   }
 
+  // Persist a versioned envelope. Returns { ok, trimmed?, error? } so callers
+  // can report honest success/failure instead of assuming it worked.
   function persist(items) {
+    const write = (arr) => localStorage.setItem(KEY, JSON.stringify({ v: SCHEMA_VERSION, items: arr }));
     try {
-      localStorage.setItem(KEY, JSON.stringify(items));
-      return true;
+      write(items);
+      return { ok: true };
     } catch (e) {
       // Quota exceeded — drop oldest non-favorites until it fits.
       const sorted = items.slice();
@@ -1748,11 +1755,11 @@ const Gallery = (() => {
         if (idx === -1) break;
         sorted.splice(idx, 1);
         try {
-          localStorage.setItem(KEY, JSON.stringify(sorted));
-          return true;
+          write(sorted);
+          return { ok: true, trimmed: items.length - sorted.length };
         } catch (e2) { /* keep trimming */ }
       }
-      return false;
+      return { ok: false, error: 'Browser storage is full and could not be trimmed.' };
     }
   }
 
@@ -1776,8 +1783,9 @@ const Gallery = (() => {
       state: State.clone(),
     };
     items.unshift(item);
-    persist(items);
-    return item;
+    const result = persist(items);
+    if (!result.ok) return { ok: false, error: result.error };
+    return { ok: true, item, trimmed: result.trimmed || 0 };
   }
 
   function list() {
@@ -1793,7 +1801,7 @@ const Gallery = (() => {
 
   function remove(id) {
     const items = load().filter((it) => it.id !== id);
-    persist(items);
+    return persist(items);
   }
 
   function toggleFavorite(id) {
@@ -1808,7 +1816,10 @@ const Gallery = (() => {
 
   function restore(id) {
     const it = get(id);
-    if (!it) return false;
+    if (!it || !it.state || typeof it.state !== 'object') return false;
+    // Only apply a saved world if it references a known mode; otherwise fall
+    // back to the current mode so a corrupt entry can't break the renderer.
+    if (!Fractals.get(it.state.mode)) it.state.mode = State.get().mode;
     State.set(it.state);
     return true;
   }
@@ -2039,6 +2050,7 @@ const UI = (() => {
   const $ = (id) => document.getElementById(id);
   let actions = {};      // App-provided callbacks
   let toastTimer = null;
+  let pendingConfirm = null; // callback for the confirm modal
 
   // ---------- Toasts ----------
   function toast(msg, type) {
@@ -2248,6 +2260,7 @@ const UI = (() => {
     bind('btn-share', () => actions.share && actions.share());
     bind('btn-export', () => { openModal('modal-export'); });
     bind('btn-gallery', () => { renderGallery(); openModal('modal-gallery'); });
+    bind('btn-save', () => openSaveModal());
     bind('btn-audio', () => actions.toggleAudio && actions.toggleAudio());
     bind('btn-settings', () => { syncSettings(); openModal('modal-settings'); });
     bind('btn-cycle', () => {
@@ -2276,6 +2289,41 @@ const UI = (() => {
       const code = window.prompt('Paste a FRACTAL FORGE share code:');
       if (code && actions.importCode) actions.importCode(code);
     });
+    // Save modal.
+    bind('btn-save-cancel', () => closeModal('modal-save'));
+    bind('btn-save-confirm', () => {
+      const name = ($('save-name') || {}).value || '';
+      if (actions.saveArtwork) actions.saveArtwork(name.trim());
+    });
+    // Confirm modal (used for destructive actions like delete).
+    bind('btn-confirm-cancel', () => { pendingConfirm = null; closeModal('modal-confirm'); });
+    bind('btn-confirm-ok', () => {
+      const fn = pendingConfirm;
+      pendingConfirm = null;
+      closeModal('modal-confirm');
+      if (fn) fn();
+    });
+  }
+
+  // Open the save modal with a sensible default name for the current world.
+  function openSaveModal() {
+    const input = $('save-name');
+    if (input) {
+      const mode = Fractals.get(State.get().mode);
+      input.value = (mode ? mode.label : 'Artwork') + ' #' + (Gallery.count() + 1);
+    }
+    openModal('modal-save');
+    if (input) { input.focus(); input.select && input.select(); }
+  }
+
+  // Show the confirm modal; `onConfirm` runs when the user accepts.
+  function openConfirm(message, onConfirm) {
+    const desc = $('confirm-desc');
+    if (desc && message) desc.textContent = message;
+    pendingConfirm = onConfirm;
+    openModal('modal-confirm');
+    const ok = $('btn-confirm-ok');
+    if (ok) ok.focus();
   }
 
   // ---------- Gallery ----------
@@ -2289,18 +2337,30 @@ const UI = (() => {
     grid.innerHTML = '';
     if (empty) empty.hidden = items.length > 0;
     for (const it of items) {
+      const name = esc(it.name);
       const card = document.createElement('div');
       card.className = 'gallery-card';
       card.innerHTML = `
-        ${it.thumb ? `<img src="${it.thumb}" alt="${esc(it.name)}" />` : ''}
-        <div class="gc-meta">
-          <span class="gc-name">${esc(it.name)}</span>
-          <span class="gc-fav" title="Favorite">${it.favorite ? '★' : '☆'}</span>
-        </div>
-        <button class="gc-del" title="Delete">✕</button>`;
-      card.addEventListener('click', () => actions.galleryRestore && actions.galleryRestore(it.id));
-      card.querySelector('.gc-fav').addEventListener('click', (e) => { e.stopPropagation(); Gallery.toggleFavorite(it.id); renderGallery(); });
-      card.querySelector('.gc-del').addEventListener('click', (e) => { e.stopPropagation(); Gallery.remove(it.id); renderGallery(); });
+        ${it.thumb ? `<img src="${it.thumb}" alt="${name}" />` : ''}
+        <div class="gc-meta"><span class="gc-name">${name}</span></div>
+        <div class="gc-actions">
+          <button class="gc-restore" aria-label="Restore ${name}">Restore</button>
+          <button class="gc-fav" aria-pressed="${!!it.favorite}" aria-label="${it.favorite ? 'Unfavorite' : 'Favorite'} ${name}">${it.favorite ? '★' : '☆'}</button>
+          <button class="gc-del" aria-label="Delete ${name}">✕</button>
+        </div>`;
+      card.querySelector('.gc-restore').addEventListener('click', () => actions.galleryRestore && actions.galleryRestore(it.id));
+      card.querySelector('.gc-fav').addEventListener('click', (e) => {
+        e.stopPropagation();
+        Gallery.toggleFavorite(it.id);
+        renderGallery();
+      });
+      card.querySelector('.gc-del').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openConfirm('Delete "' + it.name + '"? This cannot be undone.', () => {
+          Gallery.remove(it.id);
+          renderGallery();
+        });
+      });
       grid.appendChild(card);
     }
   }
@@ -2379,7 +2439,7 @@ const UI = (() => {
   }
 
   return {
-    toast, openModal, closeModal, closeAllModals,
+    toast, openModal, closeModal, closeAllModals, openSaveModal, openConfirm,
     updateStatus, updateZoomStatus, updateFps,
     populateModes, highlightMode, populatePalettes, highlightPalette, updateGradientBar,
     renderGallery, setExportProgress, syncSliders, syncSettings,
@@ -2485,6 +2545,21 @@ const App = (() => {
       );
     } else {
       UI.toast(code, 'info');
+    }
+  }
+
+  // Save the current world to the local gallery with a thumbnail.
+  function saveArtwork(name) {
+    const result = Gallery.save(name);
+    if (result.ok) {
+      UI.closeModal('modal-save');
+      if (result.trimmed > 0) {
+        UI.toast('Saved (storage full — removed ' + result.trimmed + ' oldest non-favorite' + (result.trimmed > 1 ? 's' : '') + ')', 'info');
+      } else {
+        UI.toast('Artwork saved to gallery', 'ok');
+      }
+    } else {
+      UI.toast('Could not save: ' + (result.error || 'storage error'), 'error');
     }
   }
 
@@ -2712,7 +2787,7 @@ const App = (() => {
     Ambient.init($('ambient-canvas'));
 
     UI.init({
-      setMode, randomize, newWorld, share, toggleAudio,
+      setMode, randomize, newWorld, share, toggleAudio, saveArtwork,
       galleryRestore, importCode, exportAt,
       onParam: () => {},
       onSetting,
@@ -2724,7 +2799,7 @@ const App = (() => {
   }
 
   return {
-    init, setMode, randomize, newWorld, share, toggleAudio,
+    init, setMode, randomize, newWorld, share, toggleAudio, saveArtwork,
     galleryRestore, importCode, exportAt, togglePause,
   };
 })();
