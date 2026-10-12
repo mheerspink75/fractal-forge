@@ -89,11 +89,11 @@ const Util = (() => {
   function packNumbers(nums) {
     return nums.map((n) => {
       const r = Math.round(n * 1e5) / 1e5;
-      return r.toString(36).replace('-', '~');
-    }).join('.');
+      return String(r).replace('-', '~');
+    }).join('_');
   }
   function unpackNumbers(str) {
-    return str.split('.').map((s) => parseFloat(s.replace('~', '-')));
+    return str.split('_').map((s) => parseFloat(s.replace('~', '-')));
   }
 
   const now = () => performance.now();
@@ -1901,7 +1901,7 @@ const A11y = (() => {
     persist();
   }
 
-  return { get, set, reset, defaults };
+  return { load, get, set, reset, defaults };
 })();
 
 /* ============================================================
