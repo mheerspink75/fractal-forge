@@ -783,10 +783,10 @@ const ColorSystem = (() => {
 
   const state = {
     index: 0,
-    phase: 0,          // gradient phase offset (user-adjustable)
     speed: 0.2,        // cycling speed
     contrast: 1.0,     // contrast multiplier
     cycling: false,    // animated palette cycling
+    cycleOffset: 0,    // transient animated offset (NOT serialized; base phase lives in State)
   };
 
   function current() { return PALETTES[state.index]; }
@@ -795,13 +795,20 @@ const ColorSystem = (() => {
     state.index = Util.clamp(i, 0, PALETTES.length - 1);
   }
 
-  // Advance the animated phase (called each frame).
+  // Advance the animated cycle offset (called each frame). The user's base
+  // phase is owned by State; this only tracks the transient animated offset so
+  // the two are never added together twice.
   function tick(dt) {
-    if (state.cycling) state.phase = (state.phase + dt * state.speed * 0.1) % 1.0;
+    if (state.cycling) state.cycleOffset = (state.cycleOffset + dt * state.speed * 0.1) % 1.0;
   }
 
-  // Effective phase = user phase + animated phase.
-  function effectivePhase() { return state.phase; }
+  // Reset the transient animated offset (e.g., when applying a saved world).
+  function resetCycle() { state.cycleOffset = 0; }
+
+  // Effective render phase = user base phase + animated cycle offset.
+  function effectivePhase(basePhase) {
+    return ((basePhase || 0) + state.cycleOffset) % 1.0;
+  }
 
   // Sample the palette at t in [0,1] on the CPU (for gradient preview + thumbnails).
   function sample(t) {
@@ -814,11 +821,12 @@ const ColorSystem = (() => {
   }
 
   // Build a CSS linear-gradient string for the gradient bar preview.
-  function cssGradient() {
+  function cssGradient(basePhase) {
+    const phase = effectivePhase(basePhase);
     const stops = [];
     for (let i = 0; i <= 10; i++) {
       const t = i / 10;
-      const [r, g, b] = sample(t + state.phase);
+      const [r, g, b] = sample(t + phase);
       stops.push(`rgb(${r},${g},${b}) ${i * 10}%`);
     }
     return `linear-gradient(90deg, ${stops.join(', ')})`;
@@ -839,7 +847,7 @@ const ColorSystem = (() => {
   }
 
   return {
-    PALETTES, state, current, setIndex, tick, effectivePhase, sample, cssGradient, cssGradientFor,
+    PALETTES, state, current, setIndex, tick, resetCycle, effectivePhase, sample, cssGradient, cssGradientFor,
   };
 })();
 
@@ -1225,15 +1233,20 @@ const Camera = (() => {
   let camPos = [0, 0.6, 3.0];
   let camTarget = [0, 0, 0];
   let camAngle = 0;
-  const ORBIT_RADIUS = 3.0;
+  let orbitRadius = 3.0;
+
+  function applyOrbit() {
+    camPos = [Math.sin(camAngle) * orbitRadius, 0.6, Math.cos(camAngle) * orbitRadius];
+    camTarget = [0, 0, 0];
+  }
 
   function reset(modeId) {
     const m = Fractals.get(modeId);
     center = { x: m.center[0], y: m.center[1] };
     zoom = (window.innerHeight || 800) / m.span;
-    camPos = [0, 0.6, ORBIT_RADIUS];
-    camTarget = [0, 0, 0];
     camAngle = 0;
+    orbitRadius = 3.0;
+    applyOrbit();
   }
 
   function pan(dxPixels, dyPixels) {
@@ -1258,6 +1271,12 @@ const Camera = (() => {
   // Push an absolute zoom (keeps Camera in sync with the zoom slider).
   function setZoom(z) { zoom = Util.clamp(z, 0.5, 1e9); }
 
+  // Push an absolute 2D center (used when applying a saved/randomized world).
+  function setCenter(x, y) {
+    center.x = Number.isFinite(x) ? x : center.x;
+    center.y = Number.isFinite(y) ? y : center.y;
+  }
+
   // Focus: bring the point under the cursor to center and zoom in.
   function focusAt(screenX, screenY) {
     const w = window.innerWidth, h = window.innerHeight;
@@ -1266,17 +1285,29 @@ const Camera = (() => {
     zoomAt(2.2, w / 2, h / 2);
   }
 
+  // --- 3D orbit (Mandelbulb) ---
   function rotate3d(delta) {
     camAngle += delta;
-    camPos = [Math.sin(camAngle) * ORBIT_RADIUS, 0.6, Math.cos(camAngle) * ORBIT_RADIUS];
+    applyOrbit();
   }
+  function setAngle(a) {
+    camAngle = Number.isFinite(a) ? a : 0;
+    applyOrbit();
+  }
+  function getAngle() { return camAngle; }
+  function setOrbitRadius(r) {
+    orbitRadius = Util.clamp(Number.isFinite(r) ? r : 3.0, 1.5, 8.0);
+    applyOrbit();
+  }
+  function getOrbitRadius() { return orbitRadius; }
 
   return {
     get center() { return center; },
     get zoom() { return zoom; },
     get camPos() { return camPos; },
     get camTarget() { return camTarget; },
-    reset, pan, zoomAt, zoomCenter, focusAt, rotate3d, setZoom,
+    reset, pan, zoomAt, zoomCenter, focusAt, setZoom, setCenter,
+    rotate3d, setAngle, getAngle, setOrbitRadius, getOrbitRadius,
   };
 })();
 
@@ -1429,6 +1460,8 @@ const State = (() => {
     center: [-0.6, 0.0],
     zoom: 100,
     growth: 1.0,
+    camAngle: 0,
+    orbitRadius: 3.0,
   };
   let current = cloneDefaults();
 
@@ -1517,7 +1550,30 @@ const Share = (() => {
     'mode', 'seed', 'palette', 'palettePhase', 'paletteSpeed', 'cycling',
     'contrast', 'iterations', 'detail', 'anim', 'bloom', 'trails',
     'aberration', 'vignette', 'fog', 'power', 'center', 'zoom', 'growth',
+    'camAngle', 'orbitRadius',
   ];
+
+  // Bounds for clamping untrusted numeric input.
+  const NUMERIC = {
+    seed: [0, 1e9],
+    palette: [0, 8],
+    palettePhase: [0, 1],
+    paletteSpeed: [0, 1],
+    contrast: [0.2, 2],
+    iterations: [16, 4096],
+    detail: [0, 1],
+    anim: [0, 1],
+    bloom: [0, 1],
+    trails: [0, 1],
+    aberration: [0, 1],
+    vignette: [0, 1],
+    fog: [0, 1],
+    power: [2, 16],
+    zoom: [0.5, 1e7],
+    growth: [0, 1],
+    camAngle: [-1000, 1000],
+    orbitRadius: [1.5, 8],
+  };
 
   function encode() {
     const s = State.get();
@@ -1529,37 +1585,60 @@ const Share = (() => {
     return PREFIX + Util.b64urlEncode(json);
   }
 
-  // Parse a code (with or without the prefix) into a partial state object.
+  // Parse a code (with or without the prefix) into a raw object, checking the
+  // version. Throws a useful error for malformed or unsupported codes.
   function decode(code) {
     if (typeof code !== 'string') throw new Error('Not a share code');
     let raw = code.trim();
     if (raw.startsWith(PREFIX)) raw = raw.slice(PREFIX.length);
-    const json = Util.b64urlDecode(raw);
-    const obj = JSON.parse(json);
-    if (!obj || typeof obj !== 'object') throw new Error('Malformed code');
+    if (!raw) throw new Error('Empty share code');
+    let obj;
+    try {
+      obj = JSON.parse(Util.b64urlDecode(raw));
+    } catch (e) {
+      throw new Error('Malformed share code');
+    }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new Error('Malformed share code');
+    if (obj.v !== undefined && obj.v !== VERSION) {
+      throw new Error('Unsupported share code version: ' + obj.v);
+    }
+    return obj;
+  }
+
+  // Validate + clamp a raw payload into a clean partial. Only known fields are
+  // copied (prevents prototype-pollution-style data); non-finite values are
+  // dropped; numbers are clamped to safe bounds.
+  function sanitize(raw) {
     const out = {};
-    for (const k of FIELDS) {
-      if (obj[k] !== undefined) out[k] = obj[k];
+    if (typeof raw.mode === 'string' && Fractals.get(raw.mode)) out.mode = raw.mode;
+    if (typeof raw.cycling === 'boolean') out.cycling = raw.cycling;
+    if (Array.isArray(raw.center) && raw.center.length === 2) {
+      const x = Number(raw.center[0]);
+      const y = Number(raw.center[1]);
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        out.center = [Util.clamp(x, -1e6, 1e6), Util.clamp(y, -1e6, 1e6)];
+      }
+    }
+    for (const k of Object.keys(NUMERIC)) {
+      if (raw[k] === undefined) continue;
+      const v = Number(raw[k]);
+      if (!Number.isFinite(v)) continue;
+      const [lo, hi] = NUMERIC[k];
+      out[k] = (k === 'seed' || k === 'iterations' || k === 'palette')
+        ? Math.round(Util.clamp(v, lo, hi))
+        : Util.clamp(v, lo, hi);
     }
     return out;
   }
 
-  // Apply a decoded payload to the live state (validated).
+  // Apply a decoded payload to the live state (validated + clamped).
   function apply(code) {
-    const partial = decode(code);
-    if (partial.mode && !Fractals.get(partial.mode)) {
-      delete partial.mode;
-    }
-    if (Array.isArray(partial.center) && partial.center.length === 2) {
-      partial.center = [Number(partial.center[0]) || 0, Number(partial.center[1]) || 0];
-    } else {
-      delete partial.center;
-    }
+    const partial = sanitize(decode(code));
     State.set(partial);
     return partial;
   }
 
-  return { encode, decode, apply, PREFIX };
+  return { encode, decode, sanitize, apply, PREFIX, VERSION };
 })();
 
 /* ============================================================
@@ -2084,7 +2163,7 @@ const UI = (() => {
 
   function updateGradientBar() {
     const bar = $('gradient-bar');
-    if (bar) bar.style.background = ColorSystem.cssGradient();
+    if (bar) bar.style.background = ColorSystem.cssGradient(State.get().palettePhase);
   }
 
   // ---------- Sliders ----------
@@ -2356,34 +2435,37 @@ const App = (() => {
   }
 
   // ---------- Actions (exposed to UI) ----------
-  function setMode(id) {
-    if (!Fractals.get(id)) return;
-    State.set({ mode: id });
-    Engine.setMode(id);
-    Camera.reset(id);
-    syncCamera();
+  // Apply a mode's defaults to State (center/zoom/iterations/power) without
+  // touching the other parameters.
+  function applyModeDefaults(id) {
     const m = Fractals.get(id);
+    State.set({
+      mode: id,
+      center: [m.center[0], m.center[1]],
+      zoom: (window.innerHeight || 800) / m.span,
+    });
     if (m.iterations) State.set({ iterations: m.iterations });
     if (m.power) State.set({ power: m.power });
-    Effects.clearTrails();
-    UI.highlightMode(id);
-    UI.updateStatus();
-    UI.syncSliders();
+  }
+
+  function setMode(id) {
+    if (!Fractals.get(id)) return;
+    applyModeDefaults(id);
+    applyWorld();
   }
 
   function randomize() {
     const rng = Util.mulberry32((Date.now() ^ (Math.random() * 1e9)) >>> 0);
     Procedural.randomize(rng);
-    UI.syncSliders();
-    UI.updateStatus();
-    UI.updateGradientBar();
+    applyWorld();
   }
 
   function newWorld() {
     const rng = Util.mulberry32((Date.now() ^ (Math.random() * 1e9)) >>> 0);
     const id = Fractals.ORDER[Math.floor(rng() * Fractals.ORDER.length)];
-    setMode(id);
-    randomize();
+    applyModeDefaults(id);
+    Procedural.randomize(rng);
+    applyWorld();
     UI.toast('Forged a new world', 'ok');
   }
 
@@ -2420,16 +2502,31 @@ const App = (() => {
     }
   }
 
-  function applyWorld(s) {
+  // Single reliable sync point: apply the current State to every subsystem
+  // (engine, camera, color system, UI) so they cannot silently diverge.
+  // Used by setMode, randomize, newWorld, gallery restore, and share import.
+  function applyWorld() {
+    const s = State.get();
+    const cx = Array.isArray(s.center) ? s.center[0] : 0;
+    const cy = Array.isArray(s.center) ? s.center[1] : 0;
+
     Engine.setMode(s.mode);
+
+    // Color system: index, speed, cycling; reset the transient cycle offset.
     ColorSystem.setIndex(s.palette);
-    ColorSystem.state.phase = s.palettePhase || 0;
     ColorSystem.state.speed = s.paletteSpeed != null ? s.paletteSpeed : 0.2;
     ColorSystem.state.cycling = !!s.cycling;
-    Camera.reset(s.mode);
-    State.set({ center: s.center, zoom: s.zoom });
+    ColorSystem.resetCycle();
+
+    // Camera: apply the saved center + zoom (2D) and orbit (3D).
+    Camera.setCenter(cx, cy);
     Camera.setZoom(s.zoom);
+    if (s.camAngle != null) Camera.setAngle(s.camAngle);
+    if (s.orbitRadius != null) Camera.setOrbitRadius(s.orbitRadius);
+
     Effects.clearTrails();
+
+    // UI.
     UI.highlightMode(s.mode);
     UI.highlightPalette(s.palette);
     UI.updateStatus();
@@ -2439,7 +2536,7 @@ const App = (() => {
 
   function galleryRestore(id) {
     if (Gallery.restore(id)) {
-      applyWorld(State.get());
+      applyWorld();
       UI.closeModal('modal-gallery');
       UI.toast('World loaded', 'ok');
     }
@@ -2448,7 +2545,7 @@ const App = (() => {
   function importCode(code) {
     try {
       Share.apply(code);
-      applyWorld(State.get());
+      applyWorld();
       UI.closeModal('modal-gallery');
       UI.toast('World imported', 'ok');
     } catch (e) {
@@ -2548,11 +2645,15 @@ const App = (() => {
       audioBands = [audioBands[0] * 0.95, audioBands[1] * 0.95, audioBands[2] * 0.95];
     }
 
+    const s = State.get();
+
+    // Keep the color system's transient settings in sync with State each frame
+    // so slider changes (cycle speed / on-off) take effect immediately.
+    ColorSystem.state.speed = s.paletteSpeed != null ? s.paletteSpeed : 0.2;
+    ColorSystem.state.cycling = !!s.cycling;
     ColorSystem.tick(dt);
     Ambient.tick(dt);
     adaptQuality(dt);
-
-    const s = State.get();
     const params = {
       time,
       center: s.center,
@@ -2561,7 +2662,7 @@ const App = (() => {
       detail: s.detail,
       anim: s.anim,
       seed: s.seed,
-      palettePhase: (s.palettePhase || 0) + ColorSystem.effectivePhase(),
+      palettePhase: ColorSystem.effectivePhase(s.palettePhase),
       contrast: s.contrast,
       bloom: s.bloom,
       trails: s.trails,
