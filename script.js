@@ -276,6 +276,9 @@ const GL = (() => {
   function setUniform(name, value, programObj) {
     const u = programObj.uniforms[name];
     if (!u) return;
+    // gl.uniform*() is a no-op unless the location belongs to the *currently
+    // bound* program, so bind it first (callers set uniforms before draw()).
+    gl.useProgram(programObj.program);
     const loc = u.loc;
     const v = Array.isArray(value) ? value : [value];
     // Integer / sampler / bool uniforms must use the *i setters.
