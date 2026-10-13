@@ -112,6 +112,14 @@ const GL = (() => {
   let gl = null;
   let canvas = null;
   let quadBuffer = null;
+  let contextLost = false;
+  let onContextLost = null;
+  let onContextRestored = null;
+
+  function setContextHandlers(handlers) {
+    onContextLost = handlers.onLost || null;
+    onContextRestored = handlers.onRestored || null;
+  }
 
   function init(canvasEl) {
     canvas = canvasEl;
@@ -127,6 +135,17 @@ const GL = (() => {
     gl = canvasEl.getContext('webgl', attrs) || canvasEl.getContext('experimental-webgl', attrs);
     if (!gl) throw new Error('WebGL is not supported in this browser.');
     setupQuad();
+    // Handle GPU context loss: pause, then rebuild resources on restore.
+    canvasEl.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault(); // signal intent to restore
+      contextLost = true;
+      if (onContextLost) onContextLost();
+    });
+    canvasEl.addEventListener('webglcontextrestored', () => {
+      contextLost = false;
+      setupQuad();
+      if (onContextRestored) onContextRestored();
+    });
     return gl;
   }
 
@@ -284,8 +303,10 @@ const GL = (() => {
 
   return {
     init, createProgram, createFBO, deleteFBO, render, setUniform, resize, bindTexture,
+    setContextHandlers,
     get gl() { return gl; },
     get canvas() { return canvas; },
+    get contextLost() { return contextLost; },
   };
 })();
 
@@ -1015,8 +1036,14 @@ const Engine = (() => {
     GL.render(prog, target, width, height);
   }
 
+  // Drop all cached programs so they recompile after a context restore
+  // (every GL object is invalidated when the context is lost).
+  function resetPrograms() {
+    for (const key of Object.keys(programCache)) delete programCache[key];
+  }
+
   return {
-    setMode, getMode, renderFractal, getPostProgram,
+    setMode, getMode, renderFractal, getPostProgram, resetPrograms,
     getLsystemCanvas: () => lsystemCanvas,
   };
 })();
@@ -1662,6 +1689,10 @@ const Exporter = (() => {
   // Render the current world to a 2D canvas at (w, h).
   // Preserves the on-screen framing by scaling zoom with height.
   function renderToCanvas(w, h) {
+    w = Math.round(w); h = Math.round(h);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w < 16 || h < 16) {
+      throw new Error('Invalid export dimensions');
+    }
     const gl = GL.gl;
     const screenH = window.innerHeight || 800;
     const s = State.get();
@@ -1669,48 +1700,50 @@ const Exporter = (() => {
 
     // Temporarily size the post pipeline to the export resolution.
     const prevW = window.innerWidth, prevH = window.innerHeight;
+    let baseFBO = null, outFBO = null;
     Effects.resize(w, h);
+    try {
+      baseFBO = GL.createFBO(w, h);
+      outFBO = GL.createFBO(w, h);
 
-    const baseFBO = GL.createFBO(w, h);
-    const outFBO = GL.createFBO(w, h);
+      const params = Object.assign({}, s, {
+        zoom: exportZoom,
+        time: s.time || 0,
+        audio: [0, 0, 0],
+        highContrast: A11y.get().highContrast ? 1 : 0,
+        mouse: [0.5, 0.5],
+        camPos: Camera.camPos,
+        camTarget: Camera.camTarget,
+      });
 
-    const params = Object.assign({}, s, {
-      zoom: exportZoom,
-      time: s.time || 0,
-      audio: [0, 0, 0],
-      highContrast: A11y.get().highContrast ? 1 : 0,
-      mouse: [0.5, 0.5],
-      camPos: Camera.camPos,
-      camTarget: Camera.camTarget,
-    });
+      Engine.renderFractal(baseFBO, w, h, params);
+      Effects.render(baseFBO, params, outFBO);
 
-    Engine.renderFractal(baseFBO, w, h, params);
-    Effects.render(baseFBO, params, outFBO);
+      // Read pixels back (WebGL is bottom-up, so flip vertically).
+      gl.bindFramebuffer(gl.FRAMEBUFFER, outFBO.fbo);
+      const buf = new Uint8Array(w * h * 4);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-    // Read pixels back (WebGL is bottom-up, so flip vertically).
-    gl.bindFramebuffer(gl.FRAMEBUFFER, outFBO.fbo);
-    const buf = new Uint8Array(w * h * 4);
-    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      const img = ctx.createImageData(w, h);
+      const data = img.data;
+      for (let y = 0; y < h; y++) {
+        const srcRow = (h - 1 - y) * w * 4;
+        const dstRow = y * w * 4;
+        data.set(buf.subarray(srcRow, srcRow + w * 4), dstRow);
+      }
+      ctx.putImageData(img, 0, 0);
 
-    const canvas = document.createElement('canvas');
-    canvas.width = w; canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    const img = ctx.createImageData(w, h);
-    const data = img.data;
-    for (let y = 0; y < h; y++) {
-      const srcRow = (h - 1 - y) * w * 4;
-      const dstRow = y * w * 4;
-      data.set(buf.subarray(srcRow, srcRow + w * 4), dstRow);
+      return canvas;
+    } finally {
+      // Always clean up FBOs and restore pipeline sizing.
+      if (baseFBO) GL.deleteFBO(baseFBO);
+      if (outFBO) GL.deleteFBO(outFBO);
+      Effects.resize(prevW, prevH);
     }
-    ctx.putImageData(img, 0, 0);
-
-    // Cleanup + restore pipeline sizing.
-    GL.deleteFBO(baseFBO);
-    GL.deleteFBO(outFBO);
-    Effects.resize(prevW, prevH);
-
-    return canvas;
   }
 
   function renderToDataURL(w, h) {
@@ -2643,6 +2676,13 @@ const App = (() => {
     rebuildBuffers();
   }
 
+  // Discrete quality levels + cooldown prevent the adaptive loop from
+  // rebuilding every framebuffer on adjacent frames (thrashing).
+  const QUALITY_LEVELS = [1.0, 0.85, 0.7, 0.55, 0.4];
+  let qualityIndex = 0;
+  let lastQualityChange = 0;
+  const QUALITY_COOLDOWN = 1500; // ms between adjustments
+
   // ---------- Camera sync ----------
   function syncCamera() {
     State.set({
@@ -2789,7 +2829,9 @@ const App = (() => {
     }
   }
 
+  let exporting = false;
   function exportAt(res) {
+    if (exporting) return; // busy lock: one export at a time
     let w, h;
     if (res === 'current') {
       w = window.innerWidth; h = window.innerHeight;
@@ -2797,17 +2839,23 @@ const App = (() => {
       const parts = res.split('x').map(Number);
       w = parts[0]; h = parts[1];
     }
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w < 16 || h < 16) {
+      UI.toast('Invalid export size', 'error');
+      return;
+    }
+    exporting = true;
     UI.setExportProgress(15, 'Rendering ' + w + '×' + h + '…');
     setTimeout(() => {
       try {
         Exporter.download(w, h);
-        rebuildBuffers(); // restore App buffers to the current render scale
         UI.setExportProgress(100, 'Done — check your downloads');
         UI.toast('Exported ' + w + '×' + h, 'ok');
       } catch (e) {
-        rebuildBuffers();
         UI.setExportProgress(0, 'Export failed: ' + e.message);
         UI.toast('Export failed', 'error');
+      } finally {
+        rebuildBuffers(); // restore App buffers to the current render scale
+        exporting = false;
       }
     }, 60);
   }
@@ -2852,18 +2900,38 @@ const App = (() => {
   }
 
   // ---------- Resize ----------
+  let resizeTimer = null;
   function onResize() {
-    rebuildBuffers();
-    Ambient.resize();
+    // Debounce so a resize gesture rebuilds GPU resources only once.
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      resizeTimer = null;
+      rebuildBuffers();
+      Ambient.resize();
+    }, 150);
   }
 
   // ---------- Adaptive quality ----------
-  function adaptQuality(dt) {
+  function adaptQuality(dt, now) {
     const inst = 1 / Math.max(dt, 0.001);
     fpsSmooth = fpsSmooth * 0.9 + inst * 0.1;
-    if (!A11y.get().adaptive) { setRenderScale(1.0); return; }
-    if (fpsSmooth < 45 && renderScale > 0.4) setRenderScale(renderScale - 0.1);
-    else if (fpsSmooth > 58 && renderScale < 1.0) setRenderScale(renderScale + 0.05);
+    if (!A11y.get().adaptive) {
+      if (qualityIndex !== 0) { qualityIndex = 0; setRenderScale(QUALITY_LEVELS[0]); }
+      return;
+    }
+    // Cooldown prevents thrashing (rebuilding buffers on adjacent frames).
+    if (now - lastQualityChange < QUALITY_COOLDOWN) return;
+    if (fpsSmooth < 45 && qualityIndex < QUALITY_LEVELS.length - 1) {
+      // Severe load drops two levels for faster recovery.
+      const drop = fpsSmooth < 25 ? 2 : 1;
+      qualityIndex = Math.min(QUALITY_LEVELS.length - 1, qualityIndex + drop);
+      setRenderScale(QUALITY_LEVELS[qualityIndex]);
+      lastQualityChange = now;
+    } else if (fpsSmooth > 57 && qualityIndex > 0) {
+      qualityIndex = Math.max(0, qualityIndex - 1);
+      setRenderScale(QUALITY_LEVELS[qualityIndex]);
+      lastQualityChange = now;
+    }
   }
 
   // ---------- Main loop ----------
@@ -2871,6 +2939,8 @@ const App = (() => {
     requestAnimationFrame(loop);
     const dt = Math.min(0.1, (now - lastTime) / 1000 || 0.016);
     lastTime = now;
+    // GPU context lost: skip rendering until it is restored.
+    if (GL.contextLost) return;
     // Reduced motion freezes time-based animation but keeps a static frame.
     const reduced = A11y.get().reducedMotion;
     if (!paused && !reduced) time += dt;
@@ -2890,7 +2960,7 @@ const App = (() => {
     ColorSystem.state.cycling = reduced ? false : !!s.cycling;
     if (!reduced) ColorSystem.tick(dt);
     Ambient.tick(dt);
-    adaptQuality(dt);
+    adaptQuality(dt, now);
     const params = {
       time,
       center: s.center,
@@ -2928,6 +2998,17 @@ const App = (() => {
   function init() {
     const canvas = $('gl-canvas');
     GL.init(canvas);
+    GL.setContextHandlers({
+      onLost: () => {
+        UI.toast('Graphics context lost — waiting to restore…', 'info');
+      },
+      onRestored: () => {
+        // Every GL object was invalidated; rebuild programs and buffers.
+        Engine.resetPrograms();
+        rebuildBuffers();
+        UI.toast('Graphics context restored', 'ok');
+      },
+    });
     A11y.load();
     applySettings();
 
