@@ -1323,32 +1323,38 @@ const Interaction = (() => {
   let onPan = null;
   let onZoom = null;
   let onRotate = null;
+  let onFocus = null;
   let onAction = null;
 
   let dragging = false;
   let lastX = 0;
   let lastY = 0;
   let pinchDist = 0;
-  let enabled = true;
+  // Pointer/touch and keyboard are independent: the "Keyboard shortcuts"
+  // setting must never disable mouse dragging, wheel zoom, or touch panning.
+  let pointerEnabled = true;
+  let keyboardEnabled = true;
 
   function register(handlers) {
     onPan = handlers.onPan || null;
     onZoom = handlers.onZoom || null;
     onRotate = handlers.onRotate || null;
+    onFocus = handlers.onFocus || null;
     onAction = handlers.onAction || null;
   }
 
-  function setEnabled(v) { enabled = v; }
+  function setEnabled(v) { pointerEnabled = v; }
+  function setKeyboardEnabled(v) { keyboardEnabled = v; }
 
   function init(canvas) {
     // --- Mouse ---
     canvas.addEventListener('mousedown', (e) => {
-      if (!enabled) return;
+      if (!pointerEnabled) return;
       dragging = true;
       lastX = e.clientX; lastY = e.clientY;
     });
     window.addEventListener('mousemove', (e) => {
-      if (!dragging || !enabled) return;
+      if (!dragging || !pointerEnabled) return;
       const dx = e.clientX - lastX;
       const dy = e.clientY - lastY;
       lastX = e.clientX; lastY = e.clientY;
@@ -1357,20 +1363,21 @@ const Interaction = (() => {
     window.addEventListener('mouseup', () => { dragging = false; });
 
     canvas.addEventListener('wheel', (e) => {
-      if (!enabled || !onZoom) return;
+      if (!pointerEnabled || !onZoom) return;
       e.preventDefault();
       const factor = Math.exp(-e.deltaY * 0.0015);
       onZoom(factor, e.clientX, e.clientY);
     }, { passive: false });
 
+    // Double-click focuses and recenters on the point (not a plain zoom).
     canvas.addEventListener('dblclick', (e) => {
-      if (!enabled || !onZoom) return;
-      onZoom(2.2, e.clientX, e.clientY);
+      if (!pointerEnabled || !onFocus) return;
+      onFocus(e.clientX, e.clientY);
     });
 
     // --- Touch ---
     canvas.addEventListener('touchstart', (e) => {
-      if (!enabled) return;
+      if (!pointerEnabled) return;
       if (e.touches.length === 1) {
         dragging = true;
         lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
@@ -1381,7 +1388,7 @@ const Interaction = (() => {
     }, { passive: true });
 
     canvas.addEventListener('touchmove', (e) => {
-      if (!enabled) return;
+      if (!pointerEnabled) return;
       e.preventDefault();
       if (e.touches.length === 1 && dragging) {
         const dx = e.touches[0].clientX - lastX;
@@ -1406,7 +1413,7 @@ const Interaction = (() => {
 
     // --- Keyboard ---
     window.addEventListener('keydown', (e) => {
-      if (!enabled || !onAction) return;
+      if (!keyboardEnabled || !onAction) return;
       // Ignore when typing in an input.
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       const key = e.key;
@@ -1437,7 +1444,7 @@ const Interaction = (() => {
     return Math.sqrt(dx * dx + dy * dy);
   }
 
-  return { init, register, setEnabled };
+  return { init, register, setEnabled, setKeyboardEnabled };
 })();
 
 /* ============================================================
@@ -2077,18 +2084,97 @@ const UI = (() => {
   }
 
   // ---------- Modals ----------
+  // Full modal behavior: focus moves in on open, is trapped while open,
+  // Escape closes, focus returns to the opener, and the background is inert.
+  const modalStack = [];   // open modal ids, topmost last
+  const focusStack = [];   // element focused before each modal opened
+  let trapBound = false;
+
+  const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  function focusableIn(root) {
+    return Array.from(root.querySelectorAll(FOCUSABLE)).filter((el) => el.getClientRects().length > 0);
+  }
+
+  function setInert(on) {
+    const targets = [
+      document.querySelector('.topbar'),
+      document.querySelector('.panel-left'),
+      document.querySelector('.panel-right'),
+      document.querySelector('.statusbar'),
+      document.querySelector('.onboarding'),
+    ];
+    targets.forEach((el) => { if (el && 'inert' in el) el.inert = on; });
+  }
+
+  function topModal() { return modalStack[modalStack.length - 1] || null; }
+
+  function trapFocus(e) {
+    const id = topModal();
+    if (!id) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeModal(id);
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const m = $(id);
+    if (!m) return;
+    const focusables = focusableIn(m);
+    if (!focusables.length) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey && (active === first || active === m)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
   function openModal(id) {
     const m = $(id);
     if (!m) return;
+    focusStack.push(document.activeElement);
+    modalStack.push(id);
+    if (modalStack.length === 1) {
+      setInert(true);
+      if (!trapBound) {
+        document.addEventListener('keydown', trapFocus);
+        trapBound = true;
+      }
+    }
     m.hidden = false;
-    requestAnimationFrame(() => m.classList.add('open'));
+    requestAnimationFrame(() => {
+      m.classList.add('open');
+      const focusables = focusableIn(m);
+      (focusables[0] || m).focus();
+    });
   }
+
   function closeModal(id) {
     const m = $(id);
     if (!m) return;
     m.classList.remove('open');
+    const idx = modalStack.lastIndexOf(id);
+    if (idx !== -1) {
+      const wasTop = idx === modalStack.length - 1;
+      modalStack.splice(idx, 1);
+      const prev = focusStack.splice(idx, 1)[0];
+      if (wasTop && prev && typeof prev.focus === 'function') prev.focus();
+    }
+    if (modalStack.length === 0) {
+      setInert(false);
+      if (trapBound) {
+        document.removeEventListener('keydown', trapFocus);
+        trapBound = false;
+      }
+    }
     setTimeout(() => { m.hidden = true; }, 200);
   }
+
   function closeAllModals() {
     ['modal-gallery', 'modal-export', 'modal-settings', 'modal-help'].forEach(closeModal);
   }
@@ -2140,7 +2226,7 @@ const UI = (() => {
         const btn = document.createElement('button');
         btn.className = 'mode-item';
         btn.dataset.mode = m.id;
-        btn.setAttribute('role', 'option');
+        btn.setAttribute('aria-pressed', 'false');
         btn.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="mode-name">${m.label}</span>`;
         btn.addEventListener('click', () => actions.setMode && actions.setMode(m.id));
         container.appendChild(btn);
@@ -2151,7 +2237,7 @@ const UI = (() => {
 
   function highlightMode(id) {
     document.querySelectorAll('.mode-item').forEach((el) => {
-      el.setAttribute('aria-selected', String(el.dataset.mode === id));
+      el.setAttribute('aria-pressed', String(el.dataset.mode === id));
     });
   }
 
@@ -2165,7 +2251,8 @@ const UI = (() => {
       sw.className = 'palette-swatch';
       sw.dataset.index = i;
       sw.title = p.name;
-      sw.setAttribute('role', 'option');
+      sw.setAttribute('aria-label', p.name);
+      sw.setAttribute('aria-pressed', 'false');
       sw.style.background = ColorSystem.cssGradientFor(i);
       sw.addEventListener('click', () => actions.setPalette && actions.setPalette(i));
       grid.appendChild(sw);
@@ -2175,7 +2262,7 @@ const UI = (() => {
 
   function highlightPalette(i) {
     document.querySelectorAll('.palette-swatch').forEach((el) => {
-      el.setAttribute('aria-selected', String(parseInt(el.dataset.index, 10) === i));
+      el.setAttribute('aria-pressed', String(parseInt(el.dataset.index, 10) === i));
     });
   }
 
@@ -2736,12 +2823,11 @@ const App = (() => {
     const s = A11y.get();
     Ambient.setReducedMotion(s.reducedMotion);
     Ambient.setEnabled(!s.reducedMotion);
-    Interaction.setEnabled(s.keyboard);
+    // Pointer/touch always stay available; only keyboard shortcuts toggle.
+    Interaction.setEnabled(true);
+    Interaction.setKeyboardEnabled(s.keyboard);
     document.body.classList.toggle('high-contrast', s.highContrast);
     document.body.classList.toggle('reduced-motion', s.reducedMotion);
-    if (s.reducedMotion) {
-      State.set({ trails: 0 });
-    }
   }
 
   function togglePause() {
@@ -2785,7 +2871,9 @@ const App = (() => {
     requestAnimationFrame(loop);
     const dt = Math.min(0.1, (now - lastTime) / 1000 || 0.016);
     lastTime = now;
-    if (!paused) time += dt;
+    // Reduced motion freezes time-based animation but keeps a static frame.
+    const reduced = A11y.get().reducedMotion;
+    if (!paused && !reduced) time += dt;
 
     if (Audio.isEnabled()) {
       const { bands } = Audio.sample();
@@ -2799,8 +2887,8 @@ const App = (() => {
     // Keep the color system's transient settings in sync with State each frame
     // so slider changes (cycle speed / on-off) take effect immediately.
     ColorSystem.state.speed = s.paletteSpeed != null ? s.paletteSpeed : 0.2;
-    ColorSystem.state.cycling = !!s.cycling;
-    ColorSystem.tick(dt);
+    ColorSystem.state.cycling = reduced ? false : !!s.cycling;
+    if (!reduced) ColorSystem.tick(dt);
     Ambient.tick(dt);
     adaptQuality(dt);
     const params = {
@@ -2814,7 +2902,7 @@ const App = (() => {
       palettePhase: ColorSystem.effectivePhase(s.palettePhase),
       contrast: s.contrast,
       bloom: s.bloom,
-      trails: s.trails,
+      trails: reduced ? 0 : s.trails,
       aberration: s.aberration,
       vignette: s.vignette,
       fog: s.fog,
@@ -2862,6 +2950,15 @@ const App = (() => {
           Camera.setOrbitRadius(Camera.getOrbitRadius() / factor);
         } else {
           Camera.zoomAt(factor, x, y);
+        }
+        syncCamera();
+      },
+      onFocus: (x, y) => {
+        if (State.get().mode === 'mandelbulb') {
+          Camera.setAngle(0);
+          Camera.setOrbitRadius(3.0);
+        } else {
+          Camera.focusAt(x, y);
         }
         syncCamera();
       },

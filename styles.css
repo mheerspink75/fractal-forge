@@ -273,12 +273,13 @@ body {
   transition: all 0.2s;
 }
 .mode-item:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
-.mode-item[aria-selected="true"] {
+.mode-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mode-item[aria-pressed="true"] {
   background: linear-gradient(90deg, rgba(124, 92, 255, 0.18), rgba(34, 211, 238, 0.08));
   border-color: rgba(124, 92, 255, 0.4);
   color: #fff;
 }
-.mode-item[aria-selected="true"] .dot { background: var(--accent-2); box-shadow: 0 0 10px var(--accent-2); }
+.mode-item[aria-pressed="true"] .dot { background: var(--accent-2); box-shadow: 0 0 10px var(--accent-2); }
 
 /* ---------- Control sections ---------- */
 .ctrl-section { margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--stroke); }
@@ -307,7 +308,8 @@ body {
   padding: 0;
 }
 .palette-swatch:hover { transform: translateY(-2px); }
-.palette-swatch[aria-selected="true"] { box-shadow: 0 0 0 2px var(--accent), var(--glow); }
+.palette-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.palette-swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--accent), var(--glow); }
 .palette-swatch .sw-name {
   position: absolute;
   left: 0; right: 0; bottom: 0;
