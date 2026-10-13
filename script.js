@@ -392,9 +392,10 @@ const Shaders = (() => {
   `;
 
   const JULIA = COMMON + `
+    uniform float u_julia_phase;
     void main() {
       vec2 p = toFractal();
-      float t = u_time * 0.12 * u_anim + u_seed;
+      float t = u_time * 0.12 * u_anim + u_seed + u_julia_phase;
       vec2 c = vec2(0.7885 * cos(t), 0.7885 * sin(1.3 * t));
       vec2 z = p;
       float escape = -1.0;
@@ -1007,6 +1008,9 @@ const Engine = (() => {
       GL.setUniform('u_cam_target', params.camTarget, prog);
       GL.setUniform('u_power', params.power, prog);
     }
+    if (mode.shader === 'JULIA') {
+      GL.setUniform('u_julia_phase', params.juliaPhase || 0, prog);
+    }
 
     GL.render(prog, target, width, height);
   }
@@ -1462,6 +1466,7 @@ const State = (() => {
     growth: 1.0,
     camAngle: 0,
     orbitRadius: 3.0,
+    juliaPhase: 0.0,
   };
   let current = cloneDefaults();
 
@@ -1550,7 +1555,7 @@ const Share = (() => {
     'mode', 'seed', 'palette', 'palettePhase', 'paletteSpeed', 'cycling',
     'contrast', 'iterations', 'detail', 'anim', 'bloom', 'trails',
     'aberration', 'vignette', 'fog', 'power', 'center', 'zoom', 'growth',
-    'camAngle', 'orbitRadius',
+    'camAngle', 'orbitRadius', 'juliaPhase',
   ];
 
   // Bounds for clamping untrusted numeric input.
@@ -1573,6 +1578,7 @@ const Share = (() => {
     growth: [0, 1],
     camAngle: [-1000, 1000],
     orbitRadius: [1.5, 8],
+    juliaPhase: [0, 100],
   };
 
   function encode() {
@@ -2365,6 +2371,68 @@ const UI = (() => {
     }
   }
 
+  // ---------- Mode-specific controls ----------
+  // Populate the mode-specific section for the active mode only.
+  function renderModeSpecific() {
+    const section = $('mode-specific');
+    const body = $('mode-specific-body');
+    const title = $('mode-specific-title');
+    if (!section || !body) return;
+    const mode = Fractals.get(State.get().mode);
+    if (!mode) { section.hidden = true; return; }
+
+    body.innerHTML = '';
+    const addSlider = (id, label, min, max, step, value, onInput, fmt) => {
+      const row = document.createElement('label');
+      row.className = 'slider-row';
+      const span = document.createElement('span');
+      span.className = 'val';
+      span.textContent = fmt(value);
+      row.appendChild(document.createTextNode(label + ' '));
+      row.appendChild(span);
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.id = id;
+      input.min = min; input.max = max; input.step = step; input.value = value;
+      input.setAttribute('aria-label', label);
+      row.appendChild(input);
+      input.addEventListener('input', () => {
+        const v = parseFloat(input.value);
+        span.textContent = fmt(v);
+        onInput(v);
+      });
+      body.appendChild(row);
+    };
+    const addButton = (id, label, onClick) => {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-ghost';
+      btn.id = id;
+      btn.textContent = label;
+      btn.addEventListener('click', onClick);
+      body.appendChild(btn);
+    };
+
+    if (mode.shader === 'MANDELBULB') {
+      title.textContent = 'Mandelbulb';
+      addSlider('ms-power', 'Power', 2, 16, 1, State.get().power, (v) => State.set({ power: v }), (v) => String(v));
+      addButton('ms-reset-cam', 'Reset camera', () => {
+        Camera.setAngle(0);
+        Camera.setOrbitRadius(3.0);
+        State.set({ camAngle: 0, orbitRadius: 3.0 });
+      });
+    } else if (mode.kind === 'lsystem') {
+      title.textContent = mode.label;
+      addSlider('ms-growth', 'Growth', 0, 100, 1, Math.round((State.get().growth || 1) * 100), (v) => State.set({ growth: v / 100 }), (v) => v + '%');
+    } else if (mode.shader === 'JULIA') {
+      title.textContent = 'Julia Set';
+      addSlider('ms-julia', 'Drift', 0, 1000, 1, Math.round((State.get().juliaPhase || 0) * 1000), (v) => State.set({ juliaPhase: v / 1000 }), (v) => (v / 1000).toFixed(3));
+    } else {
+      section.hidden = true;
+      return;
+    }
+    section.hidden = false;
+  }
+
   // ---------- Export ----------
   function bindExport() {
     document.querySelectorAll('.export-card').forEach((card) => {
@@ -2442,7 +2510,7 @@ const UI = (() => {
     toast, openModal, closeModal, closeAllModals, openSaveModal, openConfirm,
     updateStatus, updateZoomStatus, updateFps,
     populateModes, highlightMode, populatePalettes, highlightPalette, updateGradientBar,
-    renderGallery, setExportProgress, syncSliders, syncSettings,
+    renderGallery, setExportProgress, syncSliders, syncSettings, renderModeSpecific,
     init,
   };
 })();
@@ -2490,7 +2558,12 @@ const App = (() => {
 
   // ---------- Camera sync ----------
   function syncCamera() {
-    State.set({ center: [Camera.center.x, Camera.center.y], zoom: Camera.zoom });
+    State.set({
+      center: [Camera.center.x, Camera.center.y],
+      zoom: Camera.zoom,
+      camAngle: Camera.getAngle(),
+      orbitRadius: Camera.getOrbitRadius(),
+    });
     UI.updateZoomStatus();
   }
 
@@ -2607,6 +2680,7 @@ const App = (() => {
     UI.updateStatus();
     UI.syncSliders();
     UI.updateGradientBar();
+    UI.renderModeSpecific();
   }
 
   function galleryRestore(id) {
@@ -2746,6 +2820,7 @@ const App = (() => {
       fog: s.fog,
       power: s.power,
       growth: s.growth,
+      juliaPhase: s.juliaPhase,
       audio: audioBands,
       highContrast: A11y.get().highContrast ? 1 : 0,
       mouse,
@@ -2774,8 +2849,22 @@ const App = (() => {
 
     Interaction.init(canvas);
     Interaction.register({
-      onPan: (dx, dy) => { Camera.pan(dx, dy); syncCamera(); },
-      onZoom: (factor, x, y) => { Camera.zoomAt(factor, x, y); syncCamera(); },
+      onPan: (dx, dy) => {
+        if (State.get().mode === 'mandelbulb') {
+          Camera.rotate3d(dx * 0.01);
+        } else {
+          Camera.pan(dx, dy);
+        }
+        syncCamera();
+      },
+      onZoom: (factor, x, y) => {
+        if (State.get().mode === 'mandelbulb') {
+          Camera.setOrbitRadius(Camera.getOrbitRadius() / factor);
+        } else {
+          Camera.zoomAt(factor, x, y);
+        }
+        syncCamera();
+      },
       onAction: handleAction,
     });
 
@@ -2793,6 +2882,7 @@ const App = (() => {
       onSetting,
       onboarded: () => { try { localStorage.setItem('fractal-forge:onboarded', '1'); } catch (e) { /* ignore */ } },
     });
+    UI.renderModeSpecific();
 
     window.addEventListener('resize', onResize);
     requestAnimationFrame(loop);
