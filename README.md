@@ -34,7 +34,7 @@ exactly from a short share code.
 | **3D** | Mandelbulb — real-time raymarched distance-estimation fractal with orbit camera |
 
 ### Interaction
-- **Infinite zoom** with deep-zoom precision, **drag to pan**, **double-click to focus**
+- **Deep zoom** (up to 10⁹×) with high-precision rendering, **drag to pan**, **double-click to focus**
 - **Touch**: pinch-to-zoom and pan gestures, mobile-optimized
 - **Pause / resume** animation at any time
 - **Randomize** — new colors, formulas, animation behavior, and composition in one click
@@ -54,8 +54,10 @@ The **Mandelbulb** mode raymarches a true 3D fractal in real time with a smooth 
 adjustable power exponent.
 
 ### Gallery & persistence
-- Save artworks locally (thumbnail + full parameter set) in `localStorage`
-- Browse, favorite, restore, and delete saved creations
+- **Save Artwork** — capture the current composition (a thumbnail plus the full parameter set)
+  into a local gallery stored in `localStorage`
+- Browse, **favorite**, **restore**, and **delete** saved creations from the Gallery modal
+- Deleting a piece asks for confirmation; favorites are protected when storage is trimmed
 - No account, no server — everything stays on your device
 
 ### Share system
@@ -69,6 +71,10 @@ Render to **PNG** at your current resolution or at wallpaper sizes — **1920×1
 ### Audio-reactive mode
 Optional microphone input drives the render: frequency analysis splits the signal into bass / mid /
 treble bands that modulate motion and brightness. Falls back gracefully if access is denied.
+
+> **Secure context required:** browsers only expose the microphone (`getUserMedia`) in a *secure
+> context* — `https://` or `localhost`. The GitHub Pages deployment is HTTPS, so it works there;
+> opening the files via `file://` will not grant microphone access.
 
 ### Performance
 - Targets **60 FPS** on modern hardware
@@ -100,8 +106,10 @@ Keyboard navigation · reduced-motion option · high-contrast mode · responsive
 ## 🚀 Getting Started
 
 ### Requirements
-Any modern browser with WebGL enabled (Chrome, Edge, Firefox, Safari). No build tools, no package
-manager, no server.
+Any modern browser with **WebGL** enabled. Tested against the current stable releases of
+**Chrome, Edge, Firefox, and Safari**; older or WebGL-disabled browsers will show a graceful
+"WebGL is not supported" message instead of the render. No build tools, no package manager, no
+server required.
 
 ### Run locally
 1. Clone or download the project.
@@ -113,8 +121,10 @@ python -m http.server 8000
 # then visit http://localhost:8000
 ```
 
-> Serving over HTTP (rather than `file://`) ensures `localStorage`, the microphone, and clipboard
-> access all behave consistently.
+> Serving over a local origin (rather than `file://`) ensures `localStorage` and clipboard access
+> behave consistently. Note that `http://localhost` is treated as a *secure context* by browsers,
+> so the microphone works there too — but a plain-HTTP LAN IP (e.g. `http://192.168.x.x`) is not,
+> and the mic will be unavailable.
 
 ---
 
@@ -136,16 +146,33 @@ python -m http.server 8000
 ### Keyboard
 | Key | Action |
 |---|---|
+| Arrow keys | Pan the viewport |
+| `+` / `-` | Zoom in / out |
+| `Space` | Pause / resume |
 | `R` | Randomize |
 | `N` | New world |
-| `Space` | Pause / resume |
 | `S` | Copy share code |
-| `G` | Open gallery |
 | `E` | Open export |
-| `?` | Help / controls |
+| `G` | Open gallery |
+| `A` | Toggle audio-reactive mode |
+| `1`–`9` | Select palette 1–9 |
+
+> Keyboard shortcuts are ignored while you are typing in a text field, and can be
+> disabled entirely from **Settings → Keyboard shortcuts**.
 
 ### Top bar
-**Randomize** · **New World** · **Share** · **Export** · **Gallery** · **Audio** · **Settings**
+**Randomize** · **New World** · **Share** · **Export** · **Gallery** · **Save** · **Audio** · **Settings**
+
+### Mode-specific controls
+The left panel shows a context-sensitive control block for the active mode:
+- **Mandelbulb** — **Power** slider (2–16) and a **Reset camera** button; drag to orbit the 3D view.
+- **L-systems** (Koch, Dragon, Tree, Plant) — **Growth** slider (0–100%) that animates the structure drawing itself.
+- **Julia Set** — **Drift** slider that moves the Julia constant for a continuously evolving set.
+
+### Modals
+Dialogs (Export, Gallery, Save, Settings, Help) are accessible: **Escape** closes the topmost
+modal, **Tab / Shift+Tab** cycle focus within it, focus returns to the element that opened it on
+close, and the background UI is made inert while a modal is open.
 
 ---
 
@@ -155,10 +182,16 @@ python -m http.server 8000
 /
 ├── index.html        # Document, UI panels, modals, onboarding
 ├── styles.css        # Dark glassmorphic theme, responsive layout
-├── script.js         # All application logic (18 namespaced modules)
+├── script.js         # All application logic (20 namespaced modules)
+├── package.json      # `npm test` entry point (no runtime dependencies)
 ├── assets/
 │   ├── favicon.svg
 │   └── logo.svg
+├── test/
+│   ├── functional.js     # Pure-logic test suite (share, state, gallery, L-systems)
+│   ├── smoke.js          # Module API smoke test
+│   ├── glsl-check.js     # GLSL sanity checks
+│   └── MANUAL-CHECKLIST.md  # Browser smoke checklist
 └── README.md
 ```
 
@@ -166,7 +199,7 @@ python -m http.server 8000
 
 ## 🏗 Architecture
 
-`script.js` is organized into **18 self-contained modules**, each an IIFE exposing a small public API.
+`script.js` is organized into **20 self-contained modules**, each an IIFE exposing a small public API.
 There is no global state leakage and no external dependency — the modules communicate through explicit
 function calls.
 
@@ -206,17 +239,6 @@ pair that swaps each frame.
 
 ---
 
-## 🖼 Screenshots
-
-> *Add screenshots here once the project is running in a browser.*
-
-| Classic | Experimental | 3D |
-|---|---|---|
-| _Mandelbrot deep zoom_ | _Cosmic Nebula_ | _Mandelbulb_ |
-| `![mandelbrot](assets/screenshots/mandelbrot.png)` | `![nebula](assets/screenshots/nebula.png)` | `![mandelbulb](assets/screenshots/mandelbulb.png)` |
-
----
-
 ## 📦 GitHub Pages deployment
 
 Because the project has **no build step and no dependencies**, deployment is trivial:
@@ -224,12 +246,54 @@ Because the project has **no build step and no dependencies**, deployment is tri
 1. Push this repository to GitHub.
 2. In the repo, go to **Settings → Pages**.
 3. Under **Build and deployment**, set **Source** to `Deploy from a branch`.
-4. Choose the `main` branch and the `/ (root)` directory.
+4. Choose the **`master`** branch (the repository default) and the `/ (root)` directory.
 5. Click **Save**.
 
-Within a minute or two your site is live at `https://<username>.github.io/<repo>/`.
+Within a minute or two your site is live. For this repository it is published at:
+
+> **https://mheerspink75.github.io/fractal-forge/**
 
 > No `base` path, no bundler, no environment variables — the relative asset paths work as-is.
+> GitHub Pages serves over **HTTPS**, which is a secure context, so the microphone, clipboard,
+> and `localStorage` features all work on the live site.
+
+---
+
+## 🩺 Troubleshooting
+
+| Symptom | Likely cause & fix |
+|---|---|
+| **"FRACTAL FORGE could not start" overlay** | WebGL is unavailable or blocked. Enable hardware acceleration, update your GPU drivers, or try a different browser. |
+| **Blank canvas / shader errors in the console** | A fragment shader failed to compile on your GPU. Check the console for the first error line; this is usually a driver issue — update graphics drivers. |
+| **Microphone does nothing** | The page must be served over **HTTPS or `localhost`** (a secure context). `file://` and plain-HTTP origins cannot access the mic. Also confirm you granted the permission prompt. |
+| **Share code won't copy** | Clipboard access also requires a secure context, or the browser blocked it. Use the code shown in the dialog and copy it manually. |
+| **Export fails or the tab freezes** | Very large exports (4K) allocate big framebuffers and can exceed available memory. Close other tabs, retry at a smaller size, or use "Current". |
+| **Gallery save fails / oldest items disappear** | `localStorage` is limited (typically ~5 MB). The app trims the oldest non-favorited pieces to make room; favorite the pieces you want to keep. |
+| **Graphics context lost mid-session** | The GPU driver dropped the WebGL context (common under heavy load). The app pauses and automatically rebuilds when the context is restored. |
+
+---
+
+## 🧪 Testing
+
+The project ships a lightweight, **dependency-free** test suite that runs in plain Node — no
+framework, no browser, no build step. It exercises the pure logic (state, share codes, gallery,
+L-systems, color system) and statically sanity-checks every GLSL shader.
+
+```bash
+npm test
+```
+
+This runs three suites:
+
+| Suite | What it verifies |
+|---|---|
+| `test/functional.js` | Share-code encode/decode round trips, invalid-code rejection, boundary clamping, deterministic seeded generation, gallery schema migration & corrupt-JSON handling, mode-registry completeness |
+| `test/smoke.js` | All 20 modules are defined and expose their expected public APIs |
+| `test/glsl-check.js` | Every shader has balanced braces/parens and declares the uniforms it uses |
+
+> **Browser behavior** (rendering, gestures, modals, audio) is covered by the manual checklist in
+> [`test/MANUAL-CHECKLIST.md`](test/MANUAL-CHECKLIST.md), since the automated suite runs headless
+> without a WebGL context.
 
 ---
 

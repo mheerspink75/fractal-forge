@@ -10,13 +10,15 @@
      ColorSystem     — palettes, gradient editor, cycling
      Fractals        — mode registry + parameter sets
      Engine          — dispatches the active mode, owns uniforms
+     LSystem         — Koch / Dragon / Tree / Plant string rewriting
      Effects         — post-processing pipeline (bloom/trails/etc.)
-     Camera          — pan/zoom state, deep-zoom precision
+     Camera          — pan/zoom state, deep-zoom precision, 3D orbit
      Interaction     — mouse / touch / keyboard input
+     State           — single source of truth for render parameters
      Procedural      — seed, randomize, mutations, blending
-     Gallery         — save / restore / favorite / thumbnails
      Share           — FF- code serialize / import / export
      Exporter        — PNG / high-res / wallpaper rendering
+     Gallery         — save / restore / favorite / thumbnails
      Audio           — microphone reactive mode
      Ambient         — background particle field
      A11y            — reduced motion, high contrast, keyboard
