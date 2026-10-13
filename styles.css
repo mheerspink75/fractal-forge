@@ -13,7 +13,7 @@
   --stroke-strong: rgba(255, 255, 255, 0.16);
   --text: #e8ecf5;
   --text-dim: #9aa3b8;
-  --text-faint: #6b7385;
+  --text-faint: #7d8598;
   --accent: #7c5cff;
   --accent-2: #22d3ee;
   --accent-3: #f472b6;
@@ -196,6 +196,9 @@ body {
 .panel-left { left: 14px; }
 .panel-right { right: 14px; }
 
+/* Mobile drawer backdrop — hidden on desktop, enabled in the ≤720px block. */
+.panel-backdrop { display: none; }
+
 .panel.collapsed .panel-body { display: none; }
 .panel-left.collapsed { width: auto; }
 .panel-right.collapsed { width: auto; }
@@ -273,12 +276,13 @@ body {
   transition: all 0.2s;
 }
 .mode-item:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
-.mode-item[aria-selected="true"] {
+.mode-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mode-item[aria-pressed="true"] {
   background: linear-gradient(90deg, rgba(124, 92, 255, 0.18), rgba(34, 211, 238, 0.08));
   border-color: rgba(124, 92, 255, 0.4);
   color: #fff;
 }
-.mode-item[aria-selected="true"] .dot { background: var(--accent-2); box-shadow: 0 0 10px var(--accent-2); }
+.mode-item[aria-pressed="true"] .dot { background: var(--accent-2); box-shadow: 0 0 10px var(--accent-2); }
 
 /* ---------- Control sections ---------- */
 .ctrl-section { margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--stroke); }
@@ -307,7 +311,8 @@ body {
   padding: 0;
 }
 .palette-swatch:hover { transform: translateY(-2px); }
-.palette-swatch[aria-selected="true"] { box-shadow: 0 0 0 2px var(--accent), var(--glow); }
+.palette-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.palette-swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--accent), var(--glow); }
 .palette-swatch .sw-name {
   position: absolute;
   left: 0; right: 0; bottom: 0;
@@ -481,6 +486,35 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 .modal-close:hover { color: #fff; border-color: var(--stroke-strong); }
 .modal-body { padding: 20px 22px; overflow-y: auto; }
 .modal-sub { color: var(--text-dim); font-size: 13px; margin: 0 0 18px; }
+.modal-actions-row {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 14px 22px;
+  border-top: 1px solid var(--stroke);
+}
+.field { display: block; margin-bottom: 14px; }
+.field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
+}
+.text-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.text-input:focus { border-color: var(--accent-2); box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15); }
 
 /* Gallery grid */
 .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
@@ -490,35 +524,44 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   overflow: hidden;
   border: 1px solid var(--stroke);
   background: var(--bg-2);
-  cursor: pointer;
   transition: transform 0.2s var(--ease), box-shadow 0.2s;
-  aspect-ratio: 16 / 10;
+  display: flex;
+  flex-direction: column;
 }
 .gallery-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
-.gallery-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.gallery-card .gc-meta {
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
-  padding: 8px 10px;
-  background: linear-gradient(0deg, rgba(0,0,0,0.85), transparent);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.gallery-card img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; display: block; }
+.gallery-card .gc-meta { padding: 8px 10px 4px; }
+.gallery-card .gc-name {
+  font-size: 12px; color: var(--text); font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.gallery-card .gc-name { font-size: 11px; color: #fff; font-weight: 500; }
-.gallery-card .gc-fav { font-size: 14px; color: var(--accent-3); cursor: pointer; }
-.gallery-card .gc-del {
-  position: absolute; top: 8px; right: 8px;
-  width: 24px; height: 24px;
-  border-radius: 7px;
-  border: none;
-  background: rgba(0,0,0,0.5);
-  color: #fff;
+.gallery-card .gc-actions { display: flex; gap: 6px; padding: 6px 10px 10px; }
+.gallery-card .gc-restore {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--stroke);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-size: 12px;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.2s;
+  transition: all 0.15s;
 }
-.gallery-card:hover .gc-del { opacity: 1; }
+.gallery-card .gc-restore:hover { background: rgba(255, 255, 255, 0.1); border-color: var(--stroke-strong); }
+.gallery-card .gc-fav,
+.gallery-card .gc-del {
+  width: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--stroke);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.gallery-card .gc-fav[aria-pressed="true"] { color: var(--accent-3); border-color: var(--accent-3); }
+.gallery-card .gc-fav:hover { color: var(--accent-3); border-color: var(--accent-3); }
+.gallery-card .gc-del:hover { color: #ff5470; border-color: #ff5470; }
 .empty-state { color: var(--text-faint); font-size: 13px; text-align: center; padding: 40px 20px; }
 kbd {
   font-family: var(--font-mono);
@@ -659,17 +702,78 @@ body.reduced-motion *::after {
 }
 @media (max-width: 720px) {
   :root { --topbar-h: 56px; }
-  .panel { width: calc(100vw - 28px); max-width: 320px; }
-  .panel-left { left: 14px; }
-  .panel-right { right: 14px; }
-  .panel.collapsed { width: auto; }
   .status-center { display: none; }
   .topbar-actions { gap: 5px; }
   .btn { padding: 8px 9px; font-size: 12px; }
   .export-grid { grid-template-columns: 1fr; }
+
+  /* Panels become overlay drawers so the artwork stays visible. */
+  .panel {
+    top: var(--topbar-h);
+    bottom: 0;
+    width: min(85vw, 340px);
+    z-index: 30;
+    border-radius: 0;
+    box-shadow: 0 0 44px rgba(0, 0, 0, 0.6);
+  }
+  .panel-left { left: 0; border-radius: 0 var(--radius) var(--radius) 0; }
+  .panel-right { right: 0; border-radius: var(--radius) 0 0 var(--radius); }
+
+  /* Collapsed: a narrow edge tab with a vertical title. */
+  .panel.collapsed { width: 46px; }
+  .panel.collapsed .panel-head {
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 8px;
+  }
+  .panel.collapsed .panel-head h2 {
+    writing-mode: vertical-rl;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    max-height: none;
+  }
+  .panel.collapsed .panel-body { display: none; }
+
+  /* Backdrop behind an open drawer. */
+  .panel-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    background: rgba(4, 5, 10, 0.5);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .panel-backdrop.show { opacity: 1; pointer-events: auto; }
+
+  /* Larger touch targets on small screens. */
+  .panel-collapse, .mini-btn, .modal-close, .gc-fav, .gc-del { min-width: 40px; min-height: 40px; }
+  .mode-item, .palette-swatch { min-height: 40px; }
 }
 @media (max-width: 480px) {
   .brand-mark { width: 34px; height: 34px; }
-  .brand-text h1 { font-size: 14px; }
+  .brand-text { display: none; }
+  .topbar { padding: 0 10px; gap: 8px; }
+  .topbar-actions { gap: 4px; }
+  .btn { padding: 8px 8px; }
+  .btn .ico { font-size: 14px; }
   .status-left .status-chip:last-child { display: none; }
+}
+
+/* Landscape phones: short height — compress the chrome so the artwork and
+   panels keep usable room. */
+@media (max-height: 520px) and (orientation: landscape) {
+  :root { --topbar-h: 48px; --statusbar-h: 34px; }
+  .brand-mark { width: 30px; height: 30px; }
+  .brand-text p { display: none; }
+  .btn .lbl { display: none; }
+  .btn { padding: 7px 9px; }
+  .panel { top: var(--topbar-h); bottom: var(--statusbar-h); }
+  .panel-head { padding: 10px 14px; }
+  .panel-body { padding: 10px 14px 14px; }
+  .modal { max-height: 92vh; }
 }

@@ -10,13 +10,15 @@
      ColorSystem     — palettes, gradient editor, cycling
      Fractals        — mode registry + parameter sets
      Engine          — dispatches the active mode, owns uniforms
+     LSystem         — Koch / Dragon / Tree / Plant string rewriting
      Effects         — post-processing pipeline (bloom/trails/etc.)
-     Camera          — pan/zoom state, deep-zoom precision
+     Camera          — pan/zoom state, deep-zoom precision, 3D orbit
      Interaction     — mouse / touch / keyboard input
+     State           — single source of truth for render parameters
      Procedural      — seed, randomize, mutations, blending
-     Gallery         — save / restore / favorite / thumbnails
      Share           — FF- code serialize / import / export
      Exporter        — PNG / high-res / wallpaper rendering
+     Gallery         — save / restore / favorite / thumbnails
      Audio           — microphone reactive mode
      Ambient         — background particle field
      A11y            — reduced motion, high contrast, keyboard
@@ -112,6 +114,14 @@ const GL = (() => {
   let gl = null;
   let canvas = null;
   let quadBuffer = null;
+  let contextLost = false;
+  let onContextLost = null;
+  let onContextRestored = null;
+
+  function setContextHandlers(handlers) {
+    onContextLost = handlers.onLost || null;
+    onContextRestored = handlers.onRestored || null;
+  }
 
   function init(canvasEl) {
     canvas = canvasEl;
@@ -127,6 +137,17 @@ const GL = (() => {
     gl = canvasEl.getContext('webgl', attrs) || canvasEl.getContext('experimental-webgl', attrs);
     if (!gl) throw new Error('WebGL is not supported in this browser.');
     setupQuad();
+    // Handle GPU context loss: pause, then rebuild resources on restore.
+    canvasEl.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault(); // signal intent to restore
+      contextLost = true;
+      if (onContextLost) onContextLost();
+    });
+    canvasEl.addEventListener('webglcontextrestored', () => {
+      contextLost = false;
+      setupQuad();
+      if (onContextRestored) onContextRestored();
+    });
     return gl;
   }
 
@@ -137,28 +158,45 @@ const GL = (() => {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
   }
 
-  function compile(type, source) {
+  function compile(type, source, name) {
     const shader = gl.createShader(type);
     gl.shaderSource(shader, source);
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
       const log = gl.getShaderInfoLog(shader);
       gl.deleteShader(shader);
-      throw new Error('Shader compile error: ' + log + '\n\n' + source);
+      // Keep the full source + diagnostics in the console; surface a concise message.
+      console.error('[FRACTAL FORGE] Shader compile failed (' + name + '):\n' + log + '\n\n' + source);
+      const first = log ? log.split('\n')[0].trim() : 'unknown error';
+      throw new Error('Shader compile failed: ' + name + ' — ' + first);
     }
     return shader;
   }
 
   // Create a program from vertex + fragment source, cache uniform locations.
-  function createProgram(vsSource, fsSource) {
-    const vs = compile(gl.VERTEX_SHADER, vsSource);
-    const fs = compile(gl.FRAGMENT_SHADER, fsSource);
-    const program = gl.createProgram();
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      throw new Error('Program link error: ' + gl.getProgramInfoLog(program));
+  // `name` is used in diagnostics so failures are attributable to a specific pass.
+  function createProgram(vsSource, fsSource, name) {
+    const label = name || 'program';
+    let vs = null, fs = null, program = null;
+    try {
+      vs = compile(gl.VERTEX_SHADER, vsSource, label + ':vertex');
+      fs = compile(gl.FRAGMENT_SHADER, fsSource, label + ':fragment');
+      program = gl.createProgram();
+      gl.attachShader(program, vs);
+      gl.attachShader(program, fs);
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        const log = gl.getProgramInfoLog(program);
+        console.error('[FRACTAL FORGE] Program link failed (' + label + '):\n' + log);
+        const first = log ? log.split('\n')[0].trim() : 'unknown error';
+        throw new Error('Program link failed: ' + label + ' — ' + first);
+      }
+    } catch (e) {
+      // Clean up any partially-created objects before rethrowing.
+      if (vs) gl.deleteShader(vs);
+      if (fs) gl.deleteShader(fs);
+      if (program) gl.deleteProgram(program);
+      throw e;
     }
     gl.deleteShader(vs);
     gl.deleteShader(fs);
@@ -186,6 +224,17 @@ const GL = (() => {
     const fbo = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+
+    // Validate completeness before the framebuffer is ever used for rendering.
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    if (status !== gl.FRAMEBUFFER_COMPLETE) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.deleteTexture(texture);
+      gl.deleteFramebuffer(fbo);
+      console.error('[FRACTAL FORGE] Incomplete framebuffer (' + width + 'x' + height + '): 0x' + status.toString(16));
+      throw new Error('Failed to create a complete ' + width + 'x' + height + ' framebuffer (status 0x' + status.toString(16) + ').');
+    }
+
     gl.viewport(0, 0, width, height);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -200,13 +249,16 @@ const GL = (() => {
   }
 
   // Bind a program, draw the fullscreen quad.
+  // The quad buffer is a 4-vertex triangle strip covering clip space [-1,1];
+  // it must be drawn as a TRIANGLE_STRIP (not TRIANGLES) or only one triangle
+  // (half the viewport) is rasterized.
   function draw(programObj) {
     gl.useProgram(programObj.program);
     gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
     const loc = gl.getAttribLocation(programObj.program, 'a_pos');
     gl.enableVertexAttribArray(loc);
     gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    gl.drawArrays(gl.TRIANGLES, 0, 4);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
   // Render a program to a target FBO (or null = default framebuffer / screen).
@@ -253,8 +305,10 @@ const GL = (() => {
 
   return {
     init, createProgram, createFBO, deleteFBO, render, setUniform, resize, bindTexture,
+    setContextHandlers,
     get gl() { return gl; },
     get canvas() { return canvas; },
+    get contextLost() { return contextLost; },
   };
 })();
 
@@ -361,9 +415,10 @@ const Shaders = (() => {
   `;
 
   const JULIA = COMMON + `
+    uniform float u_julia_phase;
     void main() {
       vec2 p = toFractal();
-      float t = u_time * 0.12 * u_anim + u_seed;
+      float t = u_time * 0.12 * u_anim + u_seed + u_julia_phase;
       vec2 c = vec2(0.7885 * cos(t), 0.7885 * sin(1.3 * t));
       vec2 z = p;
       float escape = -1.0;
@@ -548,16 +603,20 @@ const Shaders = (() => {
       vec3 z = pos;
       float dr = 1.0;
       float r = 0.0;
+      const float EPS = 1e-6;
       for (int i = 0; i < 12; i++) {
         r = length(z);
         if (r > 2.0) break;
+        if (r < EPS) r = EPS;   // guard division by zero and log(0)
         float theta = acos(clamp(z.z / r, -1.0, 1.0)) * u_power;
         float phi = atan(z.y, z.x) * u_power;
         float zr = pow(r, u_power);
         dr = pow(r, u_power - 1.0) * u_power * dr + 1.0;
         z = zr * vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)) + pos;
       }
-      return 0.5 * log(r) * r * dr;
+      r = max(r, EPS);
+      dr = max(dr, EPS);
+      return 0.5 * log(r) * r / dr;
     }
 
     void main() {
@@ -574,7 +633,8 @@ const Shaders = (() => {
       for (int i = 0; i < 160; i++) {
         pos = ro + rd * t;
         dist = mandelbulbDE(pos);
-        t += dist * 0.85;
+        if (dist < 0.0) dist = 0.0;   // guard against negative/NaN estimates
+        t += min(dist, 0.5) * 0.85;  // cap the step to avoid tunneling
         if (t > 24.0 || dist < 0.0006) break;
       }
 
@@ -747,10 +807,10 @@ const ColorSystem = (() => {
 
   const state = {
     index: 0,
-    phase: 0,          // gradient phase offset (user-adjustable)
     speed: 0.2,        // cycling speed
     contrast: 1.0,     // contrast multiplier
     cycling: false,    // animated palette cycling
+    cycleOffset: 0,    // transient animated offset (NOT serialized; base phase lives in State)
   };
 
   function current() { return PALETTES[state.index]; }
@@ -759,13 +819,20 @@ const ColorSystem = (() => {
     state.index = Util.clamp(i, 0, PALETTES.length - 1);
   }
 
-  // Advance the animated phase (called each frame).
+  // Advance the animated cycle offset (called each frame). The user's base
+  // phase is owned by State; this only tracks the transient animated offset so
+  // the two are never added together twice.
   function tick(dt) {
-    if (state.cycling) state.phase = (state.phase + dt * state.speed * 0.1) % 1.0;
+    if (state.cycling) state.cycleOffset = (state.cycleOffset + dt * state.speed * 0.1) % 1.0;
   }
 
-  // Effective phase = user phase + animated phase.
-  function effectivePhase() { return state.phase; }
+  // Reset the transient animated offset (e.g., when applying a saved world).
+  function resetCycle() { state.cycleOffset = 0; }
+
+  // Effective render phase = user base phase + animated cycle offset.
+  function effectivePhase(basePhase) {
+    return ((basePhase || 0) + state.cycleOffset) % 1.0;
+  }
 
   // Sample the palette at t in [0,1] on the CPU (for gradient preview + thumbnails).
   function sample(t) {
@@ -778,11 +845,12 @@ const ColorSystem = (() => {
   }
 
   // Build a CSS linear-gradient string for the gradient bar preview.
-  function cssGradient() {
+  function cssGradient(basePhase) {
+    const phase = effectivePhase(basePhase);
     const stops = [];
     for (let i = 0; i <= 10; i++) {
       const t = i / 10;
-      const [r, g, b] = sample(t + state.phase);
+      const [r, g, b] = sample(t + phase);
       stops.push(`rgb(${r},${g},${b}) ${i * 10}%`);
     }
     return `linear-gradient(90deg, ${stops.join(', ')})`;
@@ -803,7 +871,7 @@ const ColorSystem = (() => {
   }
 
   return {
-    PALETTES, state, current, setIndex, tick, effectivePhase, sample, cssGradient, cssGradientFor,
+    PALETTES, state, current, setIndex, tick, resetCycle, effectivePhase, sample, cssGradient, cssGradientFor,
   };
 })();
 
@@ -868,14 +936,26 @@ const Engine = (() => {
 
   function getProgram(name) {
     if (!programCache[name]) {
-      programCache[name] = GL.createProgram(Shaders.VERTEX, SHADER_MAP[name]);
+      const src = SHADER_MAP[name];
+      if (!src) throw new Error('Unknown fractal shader: ' + name);
+      programCache[name] = GL.createProgram(Shaders.VERTEX, src, name);
     }
     return programCache[name];
   }
 
   function getPostProgram(name) {
-    const src = { BRIGHT_PASS: Shaders.BRIGHT_PASS, BLUR: Shaders.BLUR, COMPOSITE: Shaders.COMPOSITE, TEXTURE_DISPLAY: Shaders.TEXTURE_DISPLAY }[name];
-    if (!programCache[name]) programCache[name] = GL.createProgram(Shaders.VERTEX, src);
+    const map = {
+      BRIGHT_PASS: Shaders.BRIGHT_PASS,
+      BLUR: Shaders.BLUR,
+      COMPOSITE: Shaders.COMPOSITE,
+      FEEDBACK: Shaders.FEEDBACK,
+      TEXTURE_DISPLAY: Shaders.TEXTURE_DISPLAY,
+    };
+    if (!programCache[name]) {
+      const src = map[name];
+      if (!src) throw new Error('Unknown post-processing shader: ' + name);
+      programCache[name] = GL.createProgram(Shaders.VERTEX, src, name);
+    }
     return programCache[name];
   }
 
@@ -951,12 +1031,21 @@ const Engine = (() => {
       GL.setUniform('u_cam_target', params.camTarget, prog);
       GL.setUniform('u_power', params.power, prog);
     }
+    if (mode.shader === 'JULIA') {
+      GL.setUniform('u_julia_phase', params.juliaPhase || 0, prog);
+    }
 
     GL.render(prog, target, width, height);
   }
 
+  // Drop all cached programs so they recompile after a context restore
+  // (every GL object is invalidated when the context is lost).
+  function resetPrograms() {
+    for (const key of Object.keys(programCache)) delete programCache[key];
+  }
+
   return {
-    setMode, getMode, renderFractal, getPostProgram,
+    setMode, getMode, renderFractal, getPostProgram, resetPrograms,
     getLsystemCanvas: () => lsystemCanvas,
   };
 })();
@@ -1177,15 +1266,20 @@ const Camera = (() => {
   let camPos = [0, 0.6, 3.0];
   let camTarget = [0, 0, 0];
   let camAngle = 0;
-  const ORBIT_RADIUS = 3.0;
+  let orbitRadius = 3.0;
+
+  function applyOrbit() {
+    camPos = [Math.sin(camAngle) * orbitRadius, 0.6, Math.cos(camAngle) * orbitRadius];
+    camTarget = [0, 0, 0];
+  }
 
   function reset(modeId) {
     const m = Fractals.get(modeId);
     center = { x: m.center[0], y: m.center[1] };
     zoom = (window.innerHeight || 800) / m.span;
-    camPos = [0, 0.6, ORBIT_RADIUS];
-    camTarget = [0, 0, 0];
     camAngle = 0;
+    orbitRadius = 3.0;
+    applyOrbit();
   }
 
   function pan(dxPixels, dyPixels) {
@@ -1210,6 +1304,12 @@ const Camera = (() => {
   // Push an absolute zoom (keeps Camera in sync with the zoom slider).
   function setZoom(z) { zoom = Util.clamp(z, 0.5, 1e9); }
 
+  // Push an absolute 2D center (used when applying a saved/randomized world).
+  function setCenter(x, y) {
+    center.x = Number.isFinite(x) ? x : center.x;
+    center.y = Number.isFinite(y) ? y : center.y;
+  }
+
   // Focus: bring the point under the cursor to center and zoom in.
   function focusAt(screenX, screenY) {
     const w = window.innerWidth, h = window.innerHeight;
@@ -1218,17 +1318,29 @@ const Camera = (() => {
     zoomAt(2.2, w / 2, h / 2);
   }
 
+  // --- 3D orbit (Mandelbulb) ---
   function rotate3d(delta) {
     camAngle += delta;
-    camPos = [Math.sin(camAngle) * ORBIT_RADIUS, 0.6, Math.cos(camAngle) * ORBIT_RADIUS];
+    applyOrbit();
   }
+  function setAngle(a) {
+    camAngle = Number.isFinite(a) ? a : 0;
+    applyOrbit();
+  }
+  function getAngle() { return camAngle; }
+  function setOrbitRadius(r) {
+    orbitRadius = Util.clamp(Number.isFinite(r) ? r : 3.0, 1.5, 8.0);
+    applyOrbit();
+  }
+  function getOrbitRadius() { return orbitRadius; }
 
   return {
     get center() { return center; },
     get zoom() { return zoom; },
     get camPos() { return camPos; },
     get camTarget() { return camTarget; },
-    reset, pan, zoomAt, zoomCenter, focusAt, rotate3d, setZoom,
+    reset, pan, zoomAt, zoomCenter, focusAt, setZoom, setCenter,
+    rotate3d, setAngle, getAngle, setOrbitRadius, getOrbitRadius,
   };
 })();
 
@@ -1240,32 +1352,38 @@ const Interaction = (() => {
   let onPan = null;
   let onZoom = null;
   let onRotate = null;
+  let onFocus = null;
   let onAction = null;
 
   let dragging = false;
   let lastX = 0;
   let lastY = 0;
   let pinchDist = 0;
-  let enabled = true;
+  // Pointer/touch and keyboard are independent: the "Keyboard shortcuts"
+  // setting must never disable mouse dragging, wheel zoom, or touch panning.
+  let pointerEnabled = true;
+  let keyboardEnabled = true;
 
   function register(handlers) {
     onPan = handlers.onPan || null;
     onZoom = handlers.onZoom || null;
     onRotate = handlers.onRotate || null;
+    onFocus = handlers.onFocus || null;
     onAction = handlers.onAction || null;
   }
 
-  function setEnabled(v) { enabled = v; }
+  function setEnabled(v) { pointerEnabled = v; }
+  function setKeyboardEnabled(v) { keyboardEnabled = v; }
 
   function init(canvas) {
     // --- Mouse ---
     canvas.addEventListener('mousedown', (e) => {
-      if (!enabled) return;
+      if (!pointerEnabled) return;
       dragging = true;
       lastX = e.clientX; lastY = e.clientY;
     });
     window.addEventListener('mousemove', (e) => {
-      if (!dragging || !enabled) return;
+      if (!dragging || !pointerEnabled) return;
       const dx = e.clientX - lastX;
       const dy = e.clientY - lastY;
       lastX = e.clientX; lastY = e.clientY;
@@ -1274,20 +1392,21 @@ const Interaction = (() => {
     window.addEventListener('mouseup', () => { dragging = false; });
 
     canvas.addEventListener('wheel', (e) => {
-      if (!enabled || !onZoom) return;
+      if (!pointerEnabled || !onZoom) return;
       e.preventDefault();
       const factor = Math.exp(-e.deltaY * 0.0015);
       onZoom(factor, e.clientX, e.clientY);
     }, { passive: false });
 
+    // Double-click focuses and recenters on the point (not a plain zoom).
     canvas.addEventListener('dblclick', (e) => {
-      if (!enabled || !onZoom) return;
-      onZoom(2.2, e.clientX, e.clientY);
+      if (!pointerEnabled || !onFocus) return;
+      onFocus(e.clientX, e.clientY);
     });
 
     // --- Touch ---
     canvas.addEventListener('touchstart', (e) => {
-      if (!enabled) return;
+      if (!pointerEnabled) return;
       if (e.touches.length === 1) {
         dragging = true;
         lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
@@ -1298,7 +1417,7 @@ const Interaction = (() => {
     }, { passive: true });
 
     canvas.addEventListener('touchmove', (e) => {
-      if (!enabled) return;
+      if (!pointerEnabled) return;
       e.preventDefault();
       if (e.touches.length === 1 && dragging) {
         const dx = e.touches[0].clientX - lastX;
@@ -1323,7 +1442,7 @@ const Interaction = (() => {
 
     // --- Keyboard ---
     window.addEventListener('keydown', (e) => {
-      if (!enabled || !onAction) return;
+      if (!keyboardEnabled || !onAction) return;
       // Ignore when typing in an input.
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       const key = e.key;
@@ -1354,7 +1473,7 @@ const Interaction = (() => {
     return Math.sqrt(dx * dx + dy * dy);
   }
 
-  return { init, register, setEnabled };
+  return { init, register, setEnabled, setKeyboardEnabled };
 })();
 
 /* ============================================================
@@ -1381,6 +1500,9 @@ const State = (() => {
     center: [-0.6, 0.0],
     zoom: 100,
     growth: 1.0,
+    camAngle: 0,
+    orbitRadius: 3.0,
+    juliaPhase: 0.0,
   };
   let current = cloneDefaults();
 
@@ -1469,7 +1591,31 @@ const Share = (() => {
     'mode', 'seed', 'palette', 'palettePhase', 'paletteSpeed', 'cycling',
     'contrast', 'iterations', 'detail', 'anim', 'bloom', 'trails',
     'aberration', 'vignette', 'fog', 'power', 'center', 'zoom', 'growth',
+    'camAngle', 'orbitRadius', 'juliaPhase',
   ];
+
+  // Bounds for clamping untrusted numeric input.
+  const NUMERIC = {
+    seed: [0, 1e9],
+    palette: [0, 8],
+    palettePhase: [0, 1],
+    paletteSpeed: [0, 1],
+    contrast: [0.2, 2],
+    iterations: [16, 4096],
+    detail: [0, 1],
+    anim: [0, 1],
+    bloom: [0, 1],
+    trails: [0, 1],
+    aberration: [0, 1],
+    vignette: [0, 1],
+    fog: [0, 1],
+    power: [2, 16],
+    zoom: [0.5, 1e7],
+    growth: [0, 1],
+    camAngle: [-1000, 1000],
+    orbitRadius: [1.5, 8],
+    juliaPhase: [0, 100],
+  };
 
   function encode() {
     const s = State.get();
@@ -1481,37 +1627,60 @@ const Share = (() => {
     return PREFIX + Util.b64urlEncode(json);
   }
 
-  // Parse a code (with or without the prefix) into a partial state object.
+  // Parse a code (with or without the prefix) into a raw object, checking the
+  // version. Throws a useful error for malformed or unsupported codes.
   function decode(code) {
     if (typeof code !== 'string') throw new Error('Not a share code');
     let raw = code.trim();
     if (raw.startsWith(PREFIX)) raw = raw.slice(PREFIX.length);
-    const json = Util.b64urlDecode(raw);
-    const obj = JSON.parse(json);
-    if (!obj || typeof obj !== 'object') throw new Error('Malformed code');
+    if (!raw) throw new Error('Empty share code');
+    let obj;
+    try {
+      obj = JSON.parse(Util.b64urlDecode(raw));
+    } catch (e) {
+      throw new Error('Malformed share code');
+    }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new Error('Malformed share code');
+    if (obj.v !== undefined && obj.v !== VERSION) {
+      throw new Error('Unsupported share code version: ' + obj.v);
+    }
+    return obj;
+  }
+
+  // Validate + clamp a raw payload into a clean partial. Only known fields are
+  // copied (prevents prototype-pollution-style data); non-finite values are
+  // dropped; numbers are clamped to safe bounds.
+  function sanitize(raw) {
     const out = {};
-    for (const k of FIELDS) {
-      if (obj[k] !== undefined) out[k] = obj[k];
+    if (typeof raw.mode === 'string' && Fractals.get(raw.mode)) out.mode = raw.mode;
+    if (typeof raw.cycling === 'boolean') out.cycling = raw.cycling;
+    if (Array.isArray(raw.center) && raw.center.length === 2) {
+      const x = Number(raw.center[0]);
+      const y = Number(raw.center[1]);
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        out.center = [Util.clamp(x, -1e6, 1e6), Util.clamp(y, -1e6, 1e6)];
+      }
+    }
+    for (const k of Object.keys(NUMERIC)) {
+      if (raw[k] === undefined) continue;
+      const v = Number(raw[k]);
+      if (!Number.isFinite(v)) continue;
+      const [lo, hi] = NUMERIC[k];
+      out[k] = (k === 'seed' || k === 'iterations' || k === 'palette')
+        ? Math.round(Util.clamp(v, lo, hi))
+        : Util.clamp(v, lo, hi);
     }
     return out;
   }
 
-  // Apply a decoded payload to the live state (validated).
+  // Apply a decoded payload to the live state (validated + clamped).
   function apply(code) {
-    const partial = decode(code);
-    if (partial.mode && !Fractals.get(partial.mode)) {
-      delete partial.mode;
-    }
-    if (Array.isArray(partial.center) && partial.center.length === 2) {
-      partial.center = [Number(partial.center[0]) || 0, Number(partial.center[1]) || 0];
-    } else {
-      delete partial.center;
-    }
+    const partial = sanitize(decode(code));
     State.set(partial);
     return partial;
   }
 
-  return { encode, decode, apply, PREFIX };
+  return { encode, decode, sanitize, apply, PREFIX, VERSION };
 })();
 
 /* ============================================================
@@ -1522,6 +1691,10 @@ const Exporter = (() => {
   // Render the current world to a 2D canvas at (w, h).
   // Preserves the on-screen framing by scaling zoom with height.
   function renderToCanvas(w, h) {
+    w = Math.round(w); h = Math.round(h);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w < 16 || h < 16) {
+      throw new Error('Invalid export dimensions');
+    }
     const gl = GL.gl;
     const screenH = window.innerHeight || 800;
     const s = State.get();
@@ -1529,48 +1702,50 @@ const Exporter = (() => {
 
     // Temporarily size the post pipeline to the export resolution.
     const prevW = window.innerWidth, prevH = window.innerHeight;
+    let baseFBO = null, outFBO = null;
     Effects.resize(w, h);
+    try {
+      baseFBO = GL.createFBO(w, h);
+      outFBO = GL.createFBO(w, h);
 
-    const baseFBO = GL.createFBO(w, h);
-    const outFBO = GL.createFBO(w, h);
+      const params = Object.assign({}, s, {
+        zoom: exportZoom,
+        time: s.time || 0,
+        audio: [0, 0, 0],
+        highContrast: A11y.get().highContrast ? 1 : 0,
+        mouse: [0.5, 0.5],
+        camPos: Camera.camPos,
+        camTarget: Camera.camTarget,
+      });
 
-    const params = Object.assign({}, s, {
-      zoom: exportZoom,
-      time: s.time || 0,
-      audio: [0, 0, 0],
-      highContrast: A11y.get().highContrast ? 1 : 0,
-      mouse: [0.5, 0.5],
-      camPos: Camera.camPos,
-      camTarget: Camera.camTarget,
-    });
+      Engine.renderFractal(baseFBO, w, h, params);
+      Effects.render(baseFBO, params, outFBO);
 
-    Engine.renderFractal(baseFBO, w, h, params);
-    Effects.render(baseFBO, params, outFBO);
+      // Read pixels back (WebGL is bottom-up, so flip vertically).
+      gl.bindFramebuffer(gl.FRAMEBUFFER, outFBO.fbo);
+      const buf = new Uint8Array(w * h * 4);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-    // Read pixels back (WebGL is bottom-up, so flip vertically).
-    gl.bindFramebuffer(gl.FRAMEBUFFER, outFBO.fbo);
-    const buf = new Uint8Array(w * h * 4);
-    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      const img = ctx.createImageData(w, h);
+      const data = img.data;
+      for (let y = 0; y < h; y++) {
+        const srcRow = (h - 1 - y) * w * 4;
+        const dstRow = y * w * 4;
+        data.set(buf.subarray(srcRow, srcRow + w * 4), dstRow);
+      }
+      ctx.putImageData(img, 0, 0);
 
-    const canvas = document.createElement('canvas');
-    canvas.width = w; canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    const img = ctx.createImageData(w, h);
-    const data = img.data;
-    for (let y = 0; y < h; y++) {
-      const srcRow = (h - 1 - y) * w * 4;
-      const dstRow = y * w * 4;
-      data.set(buf.subarray(srcRow, srcRow + w * 4), dstRow);
+      return canvas;
+    } finally {
+      // Always clean up FBOs and restore pipeline sizing.
+      if (baseFBO) GL.deleteFBO(baseFBO);
+      if (outFBO) GL.deleteFBO(outFBO);
+      Effects.resize(prevW, prevH);
     }
-    ctx.putImageData(img, 0, 0);
-
-    // Cleanup + restore pipeline sizing.
-    GL.deleteFBO(baseFBO);
-    GL.deleteFBO(outFBO);
-    Effects.resize(prevW, prevH);
-
-    return canvas;
   }
 
   function renderToDataURL(w, h) {
@@ -1597,22 +1772,29 @@ const Exporter = (() => {
    ============================================================ */
 const Gallery = (() => {
   const KEY = 'fractal-forge:gallery';
+  const SCHEMA_VERSION = 1;
   const THUMB_W = 384, THUMB_H = 216;
 
   function load() {
     try {
       const raw = localStorage.getItem(KEY);
-      const arr = raw ? JSON.parse(raw) : [];
-      return Array.isArray(arr) ? arr : [];
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      // Support both the legacy bare-array format and the versioned envelope.
+      const arr = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.items) ? parsed.items : []);
+      return arr.filter((it) => it && typeof it === 'object' && it.id);
     } catch (e) {
       return [];
     }
   }
 
+  // Persist a versioned envelope. Returns { ok, trimmed?, error? } so callers
+  // can report honest success/failure instead of assuming it worked.
   function persist(items) {
+    const write = (arr) => localStorage.setItem(KEY, JSON.stringify({ v: SCHEMA_VERSION, items: arr }));
     try {
-      localStorage.setItem(KEY, JSON.stringify(items));
-      return true;
+      write(items);
+      return { ok: true };
     } catch (e) {
       // Quota exceeded — drop oldest non-favorites until it fits.
       const sorted = items.slice();
@@ -1621,11 +1803,11 @@ const Gallery = (() => {
         if (idx === -1) break;
         sorted.splice(idx, 1);
         try {
-          localStorage.setItem(KEY, JSON.stringify(sorted));
-          return true;
+          write(sorted);
+          return { ok: true, trimmed: items.length - sorted.length };
         } catch (e2) { /* keep trimming */ }
       }
-      return false;
+      return { ok: false, error: 'Browser storage is full and could not be trimmed.' };
     }
   }
 
@@ -1649,8 +1831,9 @@ const Gallery = (() => {
       state: State.clone(),
     };
     items.unshift(item);
-    persist(items);
-    return item;
+    const result = persist(items);
+    if (!result.ok) return { ok: false, error: result.error };
+    return { ok: true, item, trimmed: result.trimmed || 0 };
   }
 
   function list() {
@@ -1666,7 +1849,7 @@ const Gallery = (() => {
 
   function remove(id) {
     const items = load().filter((it) => it.id !== id);
-    persist(items);
+    return persist(items);
   }
 
   function toggleFavorite(id) {
@@ -1681,7 +1864,10 @@ const Gallery = (() => {
 
   function restore(id) {
     const it = get(id);
-    if (!it) return false;
+    if (!it || !it.state || typeof it.state !== 'object') return false;
+    // Only apply a saved world if it references a known mode; otherwise fall
+    // back to the current mode so a corrupt entry can't break the renderer.
+    if (!Fractals.get(it.state.mode)) it.state.mode = State.get().mode;
     State.set(it.state);
     return true;
   }
@@ -1912,6 +2098,7 @@ const UI = (() => {
   const $ = (id) => document.getElementById(id);
   let actions = {};      // App-provided callbacks
   let toastTimer = null;
+  let pendingConfirm = null; // callback for the confirm modal
 
   // ---------- Toasts ----------
   function toast(msg, type) {
@@ -1932,18 +2119,97 @@ const UI = (() => {
   }
 
   // ---------- Modals ----------
+  // Full modal behavior: focus moves in on open, is trapped while open,
+  // Escape closes, focus returns to the opener, and the background is inert.
+  const modalStack = [];   // open modal ids, topmost last
+  const focusStack = [];   // element focused before each modal opened
+  let trapBound = false;
+
+  const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  function focusableIn(root) {
+    return Array.from(root.querySelectorAll(FOCUSABLE)).filter((el) => el.getClientRects().length > 0);
+  }
+
+  function setInert(on) {
+    const targets = [
+      document.querySelector('.topbar'),
+      document.querySelector('.panel-left'),
+      document.querySelector('.panel-right'),
+      document.querySelector('.statusbar'),
+      document.querySelector('.onboarding'),
+    ];
+    targets.forEach((el) => { if (el && 'inert' in el) el.inert = on; });
+  }
+
+  function topModal() { return modalStack[modalStack.length - 1] || null; }
+
+  function trapFocus(e) {
+    const id = topModal();
+    if (!id) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeModal(id);
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const m = $(id);
+    if (!m) return;
+    const focusables = focusableIn(m);
+    if (!focusables.length) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey && (active === first || active === m)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
   function openModal(id) {
     const m = $(id);
     if (!m) return;
+    focusStack.push(document.activeElement);
+    modalStack.push(id);
+    if (modalStack.length === 1) {
+      setInert(true);
+      if (!trapBound) {
+        document.addEventListener('keydown', trapFocus);
+        trapBound = true;
+      }
+    }
     m.hidden = false;
-    requestAnimationFrame(() => m.classList.add('open'));
+    requestAnimationFrame(() => {
+      m.classList.add('open');
+      const focusables = focusableIn(m);
+      (focusables[0] || m).focus();
+    });
   }
+
   function closeModal(id) {
     const m = $(id);
     if (!m) return;
     m.classList.remove('open');
+    const idx = modalStack.lastIndexOf(id);
+    if (idx !== -1) {
+      const wasTop = idx === modalStack.length - 1;
+      modalStack.splice(idx, 1);
+      const prev = focusStack.splice(idx, 1)[0];
+      if (wasTop && prev && typeof prev.focus === 'function') prev.focus();
+    }
+    if (modalStack.length === 0) {
+      setInert(false);
+      if (trapBound) {
+        document.removeEventListener('keydown', trapFocus);
+        trapBound = false;
+      }
+    }
     setTimeout(() => { m.hidden = true; }, 200);
   }
+
   function closeAllModals() {
     ['modal-gallery', 'modal-export', 'modal-settings', 'modal-help'].forEach(closeModal);
   }
@@ -1995,7 +2261,7 @@ const UI = (() => {
         const btn = document.createElement('button');
         btn.className = 'mode-item';
         btn.dataset.mode = m.id;
-        btn.setAttribute('role', 'option');
+        btn.setAttribute('aria-pressed', 'false');
         btn.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="mode-name">${m.label}</span>`;
         btn.addEventListener('click', () => actions.setMode && actions.setMode(m.id));
         container.appendChild(btn);
@@ -2006,7 +2272,7 @@ const UI = (() => {
 
   function highlightMode(id) {
     document.querySelectorAll('.mode-item').forEach((el) => {
-      el.setAttribute('aria-selected', String(el.dataset.mode === id));
+      el.setAttribute('aria-pressed', String(el.dataset.mode === id));
     });
   }
 
@@ -2020,7 +2286,8 @@ const UI = (() => {
       sw.className = 'palette-swatch';
       sw.dataset.index = i;
       sw.title = p.name;
-      sw.setAttribute('role', 'option');
+      sw.setAttribute('aria-label', p.name);
+      sw.setAttribute('aria-pressed', 'false');
       sw.style.background = ColorSystem.cssGradientFor(i);
       sw.addEventListener('click', () => actions.setPalette && actions.setPalette(i));
       grid.appendChild(sw);
@@ -2030,13 +2297,13 @@ const UI = (() => {
 
   function highlightPalette(i) {
     document.querySelectorAll('.palette-swatch').forEach((el) => {
-      el.setAttribute('aria-selected', String(parseInt(el.dataset.index, 10) === i));
+      el.setAttribute('aria-pressed', String(parseInt(el.dataset.index, 10) === i));
     });
   }
 
   function updateGradientBar() {
     const bar = $('gradient-bar');
-    if (bar) bar.style.background = ColorSystem.cssGradient();
+    if (bar) bar.style.background = ColorSystem.cssGradient(State.get().palettePhase);
   }
 
   // ---------- Sliders ----------
@@ -2113,6 +2380,20 @@ const UI = (() => {
     }
   }
 
+  // ---------- Mobile drawer backdrop ----------
+  // On small screens the side panels become overlay drawers. Show a backdrop
+  // behind whichever panel is open so the user can tap outside to close it.
+  function isMobileDrawer() { return window.matchMedia('(max-width: 720px)').matches; }
+  function syncPanelBackdrop() {
+    const bd = $('panel-backdrop');
+    if (!bd) return;
+    if (!isMobileDrawer()) { bd.classList.remove('show'); return; }
+    const anyOpen = ['panel-modes', 'panel-params'].some((id) => {
+      const p = $(id); return p && !p.classList.contains('collapsed');
+    });
+    bd.classList.toggle('show', anyOpen);
+  }
+
   // ---------- Buttons ----------
   function bindButtons() {
     const bind = (id, fn) => { const el = $(id); if (el) el.addEventListener('click', fn); };
@@ -2121,6 +2402,7 @@ const UI = (() => {
     bind('btn-share', () => actions.share && actions.share());
     bind('btn-export', () => { openModal('modal-export'); });
     bind('btn-gallery', () => { renderGallery(); openModal('modal-gallery'); });
+    bind('btn-save', () => openSaveModal());
     bind('btn-audio', () => actions.toggleAudio && actions.toggleAudio());
     bind('btn-settings', () => { syncSettings(); openModal('modal-settings'); });
     bind('btn-cycle', () => {
@@ -2131,9 +2413,15 @@ const UI = (() => {
       const btn = $('btn-cycle');
       if (btn) btn.setAttribute('aria-pressed', String(cycling));
     });
-    // Panel collapse.
-    bind('collapse-modes', () => $('panel-modes').classList.toggle('collapsed'));
-    bind('collapse-params', () => $('panel-params').classList.toggle('collapsed'));
+    // Panel collapse (syncs the mobile drawer backdrop).
+    bind('collapse-modes', () => { $('panel-modes').classList.toggle('collapsed'); syncPanelBackdrop(); });
+    bind('collapse-params', () => { $('panel-params').classList.toggle('collapsed'); syncPanelBackdrop(); });
+    // Mobile drawer backdrop: tap outside to close the open panel(s).
+    const pbd = $('panel-backdrop');
+    if (pbd) pbd.addEventListener('click', () => {
+      ['panel-modes', 'panel-params'].forEach((id) => { const p = $(id); if (p) p.classList.add('collapsed'); });
+      syncPanelBackdrop();
+    });
     // Onboarding.
     bind('onboard-start', () => { hideOnboarding(); actions.onboarded && actions.onboarded(); });
     bind('onboard-help', () => { hideOnboarding(); openModal('modal-help'); });
@@ -2149,6 +2437,41 @@ const UI = (() => {
       const code = window.prompt('Paste a FRACTAL FORGE share code:');
       if (code && actions.importCode) actions.importCode(code);
     });
+    // Save modal.
+    bind('btn-save-cancel', () => closeModal('modal-save'));
+    bind('btn-save-confirm', () => {
+      const name = ($('save-name') || {}).value || '';
+      if (actions.saveArtwork) actions.saveArtwork(name.trim());
+    });
+    // Confirm modal (used for destructive actions like delete).
+    bind('btn-confirm-cancel', () => { pendingConfirm = null; closeModal('modal-confirm'); });
+    bind('btn-confirm-ok', () => {
+      const fn = pendingConfirm;
+      pendingConfirm = null;
+      closeModal('modal-confirm');
+      if (fn) fn();
+    });
+  }
+
+  // Open the save modal with a sensible default name for the current world.
+  function openSaveModal() {
+    const input = $('save-name');
+    if (input) {
+      const mode = Fractals.get(State.get().mode);
+      input.value = (mode ? mode.label : 'Artwork') + ' #' + (Gallery.count() + 1);
+    }
+    openModal('modal-save');
+    if (input) { input.focus(); input.select && input.select(); }
+  }
+
+  // Show the confirm modal; `onConfirm` runs when the user accepts.
+  function openConfirm(message, onConfirm) {
+    const desc = $('confirm-desc');
+    if (desc && message) desc.textContent = message;
+    pendingConfirm = onConfirm;
+    openModal('modal-confirm');
+    const ok = $('btn-confirm-ok');
+    if (ok) ok.focus();
   }
 
   // ---------- Gallery ----------
@@ -2162,20 +2485,94 @@ const UI = (() => {
     grid.innerHTML = '';
     if (empty) empty.hidden = items.length > 0;
     for (const it of items) {
+      const name = esc(it.name);
       const card = document.createElement('div');
       card.className = 'gallery-card';
       card.innerHTML = `
-        ${it.thumb ? `<img src="${it.thumb}" alt="${esc(it.name)}" />` : ''}
-        <div class="gc-meta">
-          <span class="gc-name">${esc(it.name)}</span>
-          <span class="gc-fav" title="Favorite">${it.favorite ? '★' : '☆'}</span>
-        </div>
-        <button class="gc-del" title="Delete">✕</button>`;
-      card.addEventListener('click', () => actions.galleryRestore && actions.galleryRestore(it.id));
-      card.querySelector('.gc-fav').addEventListener('click', (e) => { e.stopPropagation(); Gallery.toggleFavorite(it.id); renderGallery(); });
-      card.querySelector('.gc-del').addEventListener('click', (e) => { e.stopPropagation(); Gallery.remove(it.id); renderGallery(); });
+        ${it.thumb ? `<img src="${it.thumb}" alt="${name}" />` : ''}
+        <div class="gc-meta"><span class="gc-name">${name}</span></div>
+        <div class="gc-actions">
+          <button class="gc-restore" aria-label="Restore ${name}">Restore</button>
+          <button class="gc-fav" aria-pressed="${!!it.favorite}" aria-label="${it.favorite ? 'Unfavorite' : 'Favorite'} ${name}">${it.favorite ? '★' : '☆'}</button>
+          <button class="gc-del" aria-label="Delete ${name}">✕</button>
+        </div>`;
+      card.querySelector('.gc-restore').addEventListener('click', () => actions.galleryRestore && actions.galleryRestore(it.id));
+      card.querySelector('.gc-fav').addEventListener('click', (e) => {
+        e.stopPropagation();
+        Gallery.toggleFavorite(it.id);
+        renderGallery();
+      });
+      card.querySelector('.gc-del').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openConfirm('Delete "' + it.name + '"? This cannot be undone.', () => {
+          Gallery.remove(it.id);
+          renderGallery();
+        });
+      });
       grid.appendChild(card);
     }
+  }
+
+  // ---------- Mode-specific controls ----------
+  // Populate the mode-specific section for the active mode only.
+  function renderModeSpecific() {
+    const section = $('mode-specific');
+    const body = $('mode-specific-body');
+    const title = $('mode-specific-title');
+    if (!section || !body) return;
+    const mode = Fractals.get(State.get().mode);
+    if (!mode) { section.hidden = true; return; }
+
+    body.innerHTML = '';
+    const addSlider = (id, label, min, max, step, value, onInput, fmt) => {
+      const row = document.createElement('label');
+      row.className = 'slider-row';
+      const span = document.createElement('span');
+      span.className = 'val';
+      span.textContent = fmt(value);
+      row.appendChild(document.createTextNode(label + ' '));
+      row.appendChild(span);
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.id = id;
+      input.min = min; input.max = max; input.step = step; input.value = value;
+      input.setAttribute('aria-label', label);
+      row.appendChild(input);
+      input.addEventListener('input', () => {
+        const v = parseFloat(input.value);
+        span.textContent = fmt(v);
+        onInput(v);
+      });
+      body.appendChild(row);
+    };
+    const addButton = (id, label, onClick) => {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-ghost';
+      btn.id = id;
+      btn.textContent = label;
+      btn.addEventListener('click', onClick);
+      body.appendChild(btn);
+    };
+
+    if (mode.shader === 'MANDELBULB') {
+      title.textContent = 'Mandelbulb';
+      addSlider('ms-power', 'Power', 2, 16, 1, State.get().power, (v) => State.set({ power: v }), (v) => String(v));
+      addButton('ms-reset-cam', 'Reset camera', () => {
+        Camera.setAngle(0);
+        Camera.setOrbitRadius(3.0);
+        State.set({ camAngle: 0, orbitRadius: 3.0 });
+      });
+    } else if (mode.kind === 'lsystem') {
+      title.textContent = mode.label;
+      addSlider('ms-growth', 'Growth', 0, 100, 1, Math.round((State.get().growth || 1) * 100), (v) => State.set({ growth: v / 100 }), (v) => v + '%');
+    } else if (mode.shader === 'JULIA') {
+      title.textContent = 'Julia Set';
+      addSlider('ms-julia', 'Drift', 0, 1000, 1, Math.round((State.get().juliaPhase || 0) * 1000), (v) => State.set({ juliaPhase: v / 1000 }), (v) => (v / 1000).toFixed(3));
+    } else {
+      section.hidden = true;
+      return;
+    }
+    section.hidden = false;
   }
 
   // ---------- Export ----------
@@ -2245,6 +2642,14 @@ const UI = (() => {
     syncSliders();
     syncSettings();
     updateStatus();
+    // On small screens start with both panels collapsed so the artwork is visible.
+    if (isMobileDrawer()) {
+      const pm = $('panel-modes'); if (pm) pm.classList.add('collapsed');
+      const pp = $('panel-params'); if (pp) pp.classList.add('collapsed');
+    }
+    syncPanelBackdrop();
+    // Keep the drawer backdrop in sync when crossing the mobile breakpoint.
+    window.addEventListener('resize', syncPanelBackdrop);
     // Show onboarding only on first visit.
     try {
       $('onboarding').hidden = !!localStorage.getItem('fractal-forge:onboarded');
@@ -2252,10 +2657,10 @@ const UI = (() => {
   }
 
   return {
-    toast, openModal, closeModal, closeAllModals,
+    toast, openModal, closeModal, closeAllModals, openSaveModal, openConfirm,
     updateStatus, updateZoomStatus, updateFps,
     populateModes, highlightMode, populatePalettes, highlightPalette, updateGradientBar,
-    renderGallery, setExportProgress, syncSliders, syncSettings,
+    renderGallery, setExportProgress, syncSliders, syncSettings, renderModeSpecific,
     init,
   };
 })();
@@ -2301,41 +2706,56 @@ const App = (() => {
     rebuildBuffers();
   }
 
+  // Discrete quality levels + cooldown prevent the adaptive loop from
+  // rebuilding every framebuffer on adjacent frames (thrashing).
+  const QUALITY_LEVELS = [1.0, 0.85, 0.7, 0.55, 0.4];
+  let qualityIndex = 0;
+  let lastQualityChange = 0;
+  const QUALITY_COOLDOWN = 1500; // ms between adjustments
+
   // ---------- Camera sync ----------
   function syncCamera() {
-    State.set({ center: [Camera.center.x, Camera.center.y], zoom: Camera.zoom });
+    State.set({
+      center: [Camera.center.x, Camera.center.y],
+      zoom: Camera.zoom,
+      camAngle: Camera.getAngle(),
+      orbitRadius: Camera.getOrbitRadius(),
+    });
     UI.updateZoomStatus();
   }
 
   // ---------- Actions (exposed to UI) ----------
-  function setMode(id) {
-    if (!Fractals.get(id)) return;
-    State.set({ mode: id });
-    Engine.setMode(id);
-    Camera.reset(id);
-    syncCamera();
+  // Apply a mode's defaults to State (center/zoom/iterations/power) without
+  // touching the other parameters.
+  function applyModeDefaults(id) {
     const m = Fractals.get(id);
+    State.set({
+      mode: id,
+      center: [m.center[0], m.center[1]],
+      zoom: (window.innerHeight || 800) / m.span,
+    });
     if (m.iterations) State.set({ iterations: m.iterations });
     if (m.power) State.set({ power: m.power });
-    Effects.clearTrails();
-    UI.highlightMode(id);
-    UI.updateStatus();
-    UI.syncSliders();
+  }
+
+  function setMode(id) {
+    if (!Fractals.get(id)) return;
+    applyModeDefaults(id);
+    applyWorld();
   }
 
   function randomize() {
     const rng = Util.mulberry32((Date.now() ^ (Math.random() * 1e9)) >>> 0);
     Procedural.randomize(rng);
-    UI.syncSliders();
-    UI.updateStatus();
-    UI.updateGradientBar();
+    applyWorld();
   }
 
   function newWorld() {
     const rng = Util.mulberry32((Date.now() ^ (Math.random() * 1e9)) >>> 0);
     const id = Fractals.ORDER[Math.floor(rng() * Fractals.ORDER.length)];
-    setMode(id);
-    randomize();
+    applyModeDefaults(id);
+    Procedural.randomize(rng);
+    applyWorld();
     UI.toast('Forged a new world', 'ok');
   }
 
@@ -2358,6 +2778,21 @@ const App = (() => {
     }
   }
 
+  // Save the current world to the local gallery with a thumbnail.
+  function saveArtwork(name) {
+    const result = Gallery.save(name);
+    if (result.ok) {
+      UI.closeModal('modal-save');
+      if (result.trimmed > 0) {
+        UI.toast('Saved (storage full — removed ' + result.trimmed + ' oldest non-favorite' + (result.trimmed > 1 ? 's' : '') + ')', 'info');
+      } else {
+        UI.toast('Artwork saved to gallery', 'ok');
+      }
+    } else {
+      UI.toast('Could not save: ' + (result.error || 'storage error'), 'error');
+    }
+  }
+
   function toggleAudio() {
     const btn = $('btn-audio');
     if (Audio.isEnabled()) {
@@ -2372,26 +2807,42 @@ const App = (() => {
     }
   }
 
-  function applyWorld(s) {
+  // Single reliable sync point: apply the current State to every subsystem
+  // (engine, camera, color system, UI) so they cannot silently diverge.
+  // Used by setMode, randomize, newWorld, gallery restore, and share import.
+  function applyWorld() {
+    const s = State.get();
+    const cx = Array.isArray(s.center) ? s.center[0] : 0;
+    const cy = Array.isArray(s.center) ? s.center[1] : 0;
+
     Engine.setMode(s.mode);
+
+    // Color system: index, speed, cycling; reset the transient cycle offset.
     ColorSystem.setIndex(s.palette);
-    ColorSystem.state.phase = s.palettePhase || 0;
     ColorSystem.state.speed = s.paletteSpeed != null ? s.paletteSpeed : 0.2;
     ColorSystem.state.cycling = !!s.cycling;
-    Camera.reset(s.mode);
-    State.set({ center: s.center, zoom: s.zoom });
+    ColorSystem.resetCycle();
+
+    // Camera: apply the saved center + zoom (2D) and orbit (3D).
+    Camera.setCenter(cx, cy);
     Camera.setZoom(s.zoom);
+    if (s.camAngle != null) Camera.setAngle(s.camAngle);
+    if (s.orbitRadius != null) Camera.setOrbitRadius(s.orbitRadius);
+
     Effects.clearTrails();
+
+    // UI.
     UI.highlightMode(s.mode);
     UI.highlightPalette(s.palette);
     UI.updateStatus();
     UI.syncSliders();
     UI.updateGradientBar();
+    UI.renderModeSpecific();
   }
 
   function galleryRestore(id) {
     if (Gallery.restore(id)) {
-      applyWorld(State.get());
+      applyWorld();
       UI.closeModal('modal-gallery');
       UI.toast('World loaded', 'ok');
     }
@@ -2400,7 +2851,7 @@ const App = (() => {
   function importCode(code) {
     try {
       Share.apply(code);
-      applyWorld(State.get());
+      applyWorld();
       UI.closeModal('modal-gallery');
       UI.toast('World imported', 'ok');
     } catch (e) {
@@ -2408,7 +2859,9 @@ const App = (() => {
     }
   }
 
+  let exporting = false;
   function exportAt(res) {
+    if (exporting) return; // busy lock: one export at a time
     let w, h;
     if (res === 'current') {
       w = window.innerWidth; h = window.innerHeight;
@@ -2416,17 +2869,23 @@ const App = (() => {
       const parts = res.split('x').map(Number);
       w = parts[0]; h = parts[1];
     }
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w < 16 || h < 16) {
+      UI.toast('Invalid export size', 'error');
+      return;
+    }
+    exporting = true;
     UI.setExportProgress(15, 'Rendering ' + w + '×' + h + '…');
     setTimeout(() => {
       try {
         Exporter.download(w, h);
-        rebuildBuffers(); // restore App buffers to the current render scale
         UI.setExportProgress(100, 'Done — check your downloads');
         UI.toast('Exported ' + w + '×' + h, 'ok');
       } catch (e) {
-        rebuildBuffers();
         UI.setExportProgress(0, 'Export failed: ' + e.message);
         UI.toast('Export failed', 'error');
+      } finally {
+        rebuildBuffers(); // restore App buffers to the current render scale
+        exporting = false;
       }
     }, 60);
   }
@@ -2442,12 +2901,11 @@ const App = (() => {
     const s = A11y.get();
     Ambient.setReducedMotion(s.reducedMotion);
     Ambient.setEnabled(!s.reducedMotion);
-    Interaction.setEnabled(s.keyboard);
+    // Pointer/touch always stay available; only keyboard shortcuts toggle.
+    Interaction.setEnabled(true);
+    Interaction.setKeyboardEnabled(s.keyboard);
     document.body.classList.toggle('high-contrast', s.highContrast);
     document.body.classList.toggle('reduced-motion', s.reducedMotion);
-    if (s.reducedMotion) {
-      State.set({ trails: 0 });
-    }
   }
 
   function togglePause() {
@@ -2472,18 +2930,38 @@ const App = (() => {
   }
 
   // ---------- Resize ----------
+  let resizeTimer = null;
   function onResize() {
-    rebuildBuffers();
-    Ambient.resize();
+    // Debounce so a resize gesture rebuilds GPU resources only once.
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      resizeTimer = null;
+      rebuildBuffers();
+      Ambient.resize();
+    }, 150);
   }
 
   // ---------- Adaptive quality ----------
-  function adaptQuality(dt) {
+  function adaptQuality(dt, now) {
     const inst = 1 / Math.max(dt, 0.001);
     fpsSmooth = fpsSmooth * 0.9 + inst * 0.1;
-    if (!A11y.get().adaptive) { setRenderScale(1.0); return; }
-    if (fpsSmooth < 45 && renderScale > 0.4) setRenderScale(renderScale - 0.1);
-    else if (fpsSmooth > 58 && renderScale < 1.0) setRenderScale(renderScale + 0.05);
+    if (!A11y.get().adaptive) {
+      if (qualityIndex !== 0) { qualityIndex = 0; setRenderScale(QUALITY_LEVELS[0]); }
+      return;
+    }
+    // Cooldown prevents thrashing (rebuilding buffers on adjacent frames).
+    if (now - lastQualityChange < QUALITY_COOLDOWN) return;
+    if (fpsSmooth < 45 && qualityIndex < QUALITY_LEVELS.length - 1) {
+      // Severe load drops two levels for faster recovery.
+      const drop = fpsSmooth < 25 ? 2 : 1;
+      qualityIndex = Math.min(QUALITY_LEVELS.length - 1, qualityIndex + drop);
+      setRenderScale(QUALITY_LEVELS[qualityIndex]);
+      lastQualityChange = now;
+    } else if (fpsSmooth > 57 && qualityIndex > 0) {
+      qualityIndex = Math.max(0, qualityIndex - 1);
+      setRenderScale(QUALITY_LEVELS[qualityIndex]);
+      lastQualityChange = now;
+    }
   }
 
   // ---------- Main loop ----------
@@ -2491,7 +2969,11 @@ const App = (() => {
     requestAnimationFrame(loop);
     const dt = Math.min(0.1, (now - lastTime) / 1000 || 0.016);
     lastTime = now;
-    if (!paused) time += dt;
+    // GPU context lost: skip rendering until it is restored.
+    if (GL.contextLost) return;
+    // Reduced motion freezes time-based animation but keeps a static frame.
+    const reduced = A11y.get().reducedMotion;
+    if (!paused && !reduced) time += dt;
 
     if (Audio.isEnabled()) {
       const { bands } = Audio.sample();
@@ -2500,11 +2982,15 @@ const App = (() => {
       audioBands = [audioBands[0] * 0.95, audioBands[1] * 0.95, audioBands[2] * 0.95];
     }
 
-    ColorSystem.tick(dt);
-    Ambient.tick(dt);
-    adaptQuality(dt);
-
     const s = State.get();
+
+    // Keep the color system's transient settings in sync with State each frame
+    // so slider changes (cycle speed / on-off) take effect immediately.
+    ColorSystem.state.speed = s.paletteSpeed != null ? s.paletteSpeed : 0.2;
+    ColorSystem.state.cycling = reduced ? false : !!s.cycling;
+    if (!reduced) ColorSystem.tick(dt);
+    Ambient.tick(dt);
+    adaptQuality(dt, now);
     const params = {
       time,
       center: s.center,
@@ -2513,15 +2999,16 @@ const App = (() => {
       detail: s.detail,
       anim: s.anim,
       seed: s.seed,
-      palettePhase: (s.palettePhase || 0) + ColorSystem.effectivePhase(),
+      palettePhase: ColorSystem.effectivePhase(s.palettePhase),
       contrast: s.contrast,
       bloom: s.bloom,
-      trails: s.trails,
+      trails: reduced ? 0 : s.trails,
       aberration: s.aberration,
       vignette: s.vignette,
       fog: s.fog,
       power: s.power,
       growth: s.growth,
+      juliaPhase: s.juliaPhase,
       audio: audioBands,
       highContrast: A11y.get().highContrast ? 1 : 0,
       mouse,
@@ -2541,6 +3028,17 @@ const App = (() => {
   function init() {
     const canvas = $('gl-canvas');
     GL.init(canvas);
+    GL.setContextHandlers({
+      onLost: () => {
+        UI.toast('Graphics context lost — waiting to restore…', 'info');
+      },
+      onRestored: () => {
+        // Every GL object was invalidated; rebuild programs and buffers.
+        Engine.resetPrograms();
+        rebuildBuffers();
+        UI.toast('Graphics context restored', 'ok');
+      },
+    });
     A11y.load();
     applySettings();
 
@@ -2550,8 +3048,31 @@ const App = (() => {
 
     Interaction.init(canvas);
     Interaction.register({
-      onPan: (dx, dy) => { Camera.pan(dx, dy); syncCamera(); },
-      onZoom: (factor, x, y) => { Camera.zoomAt(factor, x, y); syncCamera(); },
+      onPan: (dx, dy) => {
+        if (State.get().mode === 'mandelbulb') {
+          Camera.rotate3d(dx * 0.01);
+        } else {
+          Camera.pan(dx, dy);
+        }
+        syncCamera();
+      },
+      onZoom: (factor, x, y) => {
+        if (State.get().mode === 'mandelbulb') {
+          Camera.setOrbitRadius(Camera.getOrbitRadius() / factor);
+        } else {
+          Camera.zoomAt(factor, x, y);
+        }
+        syncCamera();
+      },
+      onFocus: (x, y) => {
+        if (State.get().mode === 'mandelbulb') {
+          Camera.setAngle(0);
+          Camera.setOrbitRadius(3.0);
+        } else {
+          Camera.focusAt(x, y);
+        }
+        syncCamera();
+      },
       onAction: handleAction,
     });
 
@@ -2563,19 +3084,20 @@ const App = (() => {
     Ambient.init($('ambient-canvas'));
 
     UI.init({
-      setMode, randomize, newWorld, share, toggleAudio,
+      setMode, randomize, newWorld, share, toggleAudio, saveArtwork,
       galleryRestore, importCode, exportAt,
       onParam: () => {},
       onSetting,
       onboarded: () => { try { localStorage.setItem('fractal-forge:onboarded', '1'); } catch (e) { /* ignore */ } },
     });
+    UI.renderModeSpecific();
 
     window.addEventListener('resize', onResize);
     requestAnimationFrame(loop);
   }
 
   return {
-    init, setMode, randomize, newWorld, share, toggleAudio,
+    init, setMode, randomize, newWorld, share, toggleAudio, saveArtwork,
     galleryRestore, importCode, exportAt, togglePause,
   };
 })();

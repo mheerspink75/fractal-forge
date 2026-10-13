@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="FRACTAL FORGE — an immersive, infinitely generative fractal art installation. Explore, customize, and export gallery-quality digital art in your browser." />
   <meta name="theme-color" content="#05060a" />
   <meta property="og:title" content="FRACTAL FORGE" />
@@ -20,7 +20,7 @@
   <canvas id="ambient-canvas" aria-hidden="true"></canvas>
 
   <!-- Main WebGL render surface -->
-  <canvas id="gl-canvas" role="img" aria-label="Interactive generative fractal artwork"></canvas>
+  <canvas id="gl-canvas" role="img" aria-label="Interactive mathematical art renderer. Use the Fractal Worlds and Parameters panels to change the mode, palette, and effects; scroll or pinch to zoom and drag to pan."></canvas>
 
   <!-- Subtle vignette / grain overlay for cinematic depth -->
   <div class="fx-overlay" aria-hidden="true"></div>
@@ -64,6 +64,9 @@
       <button class="btn btn-ghost" id="btn-gallery" title="Gallery (G)">
         <span class="ico" aria-hidden="true">▤</span><span class="lbl">Gallery</span>
       </button>
+      <button class="btn btn-primary" id="btn-save" title="Save artwork">
+        <span class="ico" aria-hidden="true">✚</span><span class="lbl">Save</span>
+      </button>
       <button class="btn btn-ghost" id="btn-audio" title="Audio reactive (A)" aria-pressed="false">
         <span class="ico" aria-hidden="true">♪</span><span class="lbl">Audio</span>
       </button>
@@ -73,7 +76,10 @@
     </nav>
   </header>
 
-  <!-- ===================== LEFT PANEL: MODES ===================== -->
+      <!-- Mobile drawer backdrop (shown when a side panel is open on small screens) -->
+      <div class="panel-backdrop" id="panel-backdrop" aria-hidden="true"></div>
+
+      <!-- ===================== LEFT PANEL: MODES ===================== -->
   <aside class="panel panel-left" id="panel-modes" aria-label="Fractal modes">
     <div class="panel-head">
       <h2>Fractal Worlds</h2>
@@ -82,19 +88,19 @@
     <div class="panel-body">
       <div class="mode-group">
         <p class="group-label">Classics</p>
-        <div class="mode-list" id="mode-list-classic" role="listbox" aria-label="Classic fractals"></div>
+        <div class="mode-list" id="mode-list-classic" role="group" aria-label="Classic fractals"></div>
       </div>
       <div class="mode-group">
         <p class="group-label">Experimental</p>
-        <div class="mode-list" id="mode-list-experimental" role="listbox" aria-label="Experimental fractals"></div>
+        <div class="mode-list" id="mode-list-experimental" role="group" aria-label="Experimental fractals"></div>
       </div>
       <div class="mode-group">
         <p class="group-label">Structural</p>
-        <div class="mode-list" id="mode-list-structural" role="listbox" aria-label="Structural fractals"></div>
+        <div class="mode-list" id="mode-list-structural" role="group" aria-label="Structural fractals"></div>
       </div>
       <div class="mode-group">
         <p class="group-label">3D</p>
-        <div class="mode-list" id="mode-list-3d" role="listbox" aria-label="3D fractals"></div>
+        <div class="mode-list" id="mode-list-3d" role="group" aria-label="3D fractals"></div>
       </div>
     </div>
   </aside>
@@ -112,7 +118,7 @@
           <h3>Palette</h3>
           <button class="mini-btn" id="btn-cycle" title="Toggle animated palette cycling">Cycle</button>
         </div>
-        <div class="palette-grid" id="palette-grid" role="listbox" aria-label="Color palette"></div>
+        <div class="palette-grid" id="palette-grid" role="group" aria-label="Color palette"></div>
         <div class="gradient-editor" id="gradient-editor">
           <div class="gradient-bar" id="gradient-bar" aria-hidden="true"></div>
           <div class="grad-sliders">
@@ -196,7 +202,43 @@
       </div>
       <div class="modal-body">
         <div class="gallery-grid" id="gallery-grid"></div>
-        <p class="empty-state" id="gallery-empty">No saved artworks yet. Press <kbd>Save</kbd> on any world to keep it here.</p>
+        <p class="empty-state" id="gallery-empty">No saved artworks yet. Use the <b>Save</b> button to keep a world here.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modal-save" hidden>
+    <div class="modal modal-narrow" role="dialog" aria-modal="true" aria-labelledby="save-title">
+      <div class="modal-head">
+        <h2 id="save-title">Save artwork</h2>
+        <button class="modal-close" data-close="modal-save" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="field" for="save-name">
+          <span class="field-label">Name</span>
+          <input type="text" id="save-name" class="text-input" maxlength="60" autocomplete="off" />
+        </label>
+        <p class="modal-sub">Saved locally in your browser with a thumbnail and the full parameter set.</p>
+      </div>
+      <div class="modal-actions-row">
+        <button class="btn btn-ghost" id="btn-save-cancel">Cancel</button>
+        <button class="btn btn-primary" id="btn-save-confirm">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modal-confirm" hidden>
+    <div class="modal modal-narrow" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-desc">
+      <div class="modal-head">
+        <h2 id="confirm-title">Delete artwork?</h2>
+        <button class="modal-close" data-close="modal-confirm" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-desc">This permanently removes the artwork from your local gallery.</p>
+      </div>
+      <div class="modal-actions-row">
+        <button class="btn btn-ghost" id="btn-confirm-cancel">Cancel</button>
+        <button class="btn btn-danger" id="btn-confirm-ok">Delete</button>
       </div>
     </div>
   </div>

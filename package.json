@@ -1,0 +1,10 @@
+{
+  "name": "fractal-forge",
+  "version": "1.0.0",
+  "description": "FRACTAL FORGE — a WebGL generative fractal art installation (zero-build, static).",
+  "private": true,
+  "scripts": {
+    "test": "node test/functional.js && node test/smoke.js && node test/glsl-check.js"
+  },
+  "license": "MIT"
+}
