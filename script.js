@@ -2380,6 +2380,20 @@ const UI = (() => {
     }
   }
 
+  // ---------- Mobile drawer backdrop ----------
+  // On small screens the side panels become overlay drawers. Show a backdrop
+  // behind whichever panel is open so the user can tap outside to close it.
+  function isMobileDrawer() { return window.matchMedia('(max-width: 720px)').matches; }
+  function syncPanelBackdrop() {
+    const bd = $('panel-backdrop');
+    if (!bd) return;
+    if (!isMobileDrawer()) { bd.classList.remove('show'); return; }
+    const anyOpen = ['panel-modes', 'panel-params'].some((id) => {
+      const p = $(id); return p && !p.classList.contains('collapsed');
+    });
+    bd.classList.toggle('show', anyOpen);
+  }
+
   // ---------- Buttons ----------
   function bindButtons() {
     const bind = (id, fn) => { const el = $(id); if (el) el.addEventListener('click', fn); };
@@ -2399,9 +2413,15 @@ const UI = (() => {
       const btn = $('btn-cycle');
       if (btn) btn.setAttribute('aria-pressed', String(cycling));
     });
-    // Panel collapse.
-    bind('collapse-modes', () => $('panel-modes').classList.toggle('collapsed'));
-    bind('collapse-params', () => $('panel-params').classList.toggle('collapsed'));
+    // Panel collapse (syncs the mobile drawer backdrop).
+    bind('collapse-modes', () => { $('panel-modes').classList.toggle('collapsed'); syncPanelBackdrop(); });
+    bind('collapse-params', () => { $('panel-params').classList.toggle('collapsed'); syncPanelBackdrop(); });
+    // Mobile drawer backdrop: tap outside to close the open panel(s).
+    const pbd = $('panel-backdrop');
+    if (pbd) pbd.addEventListener('click', () => {
+      ['panel-modes', 'panel-params'].forEach((id) => { const p = $(id); if (p) p.classList.add('collapsed'); });
+      syncPanelBackdrop();
+    });
     // Onboarding.
     bind('onboard-start', () => { hideOnboarding(); actions.onboarded && actions.onboarded(); });
     bind('onboard-help', () => { hideOnboarding(); openModal('modal-help'); });
@@ -2622,6 +2642,14 @@ const UI = (() => {
     syncSliders();
     syncSettings();
     updateStatus();
+    // On small screens start with both panels collapsed so the artwork is visible.
+    if (isMobileDrawer()) {
+      const pm = $('panel-modes'); if (pm) pm.classList.add('collapsed');
+      const pp = $('panel-params'); if (pp) pp.classList.add('collapsed');
+    }
+    syncPanelBackdrop();
+    // Keep the drawer backdrop in sync when crossing the mobile breakpoint.
+    window.addEventListener('resize', syncPanelBackdrop);
     // Show onboarding only on first visit.
     try {
       $('onboarding').hidden = !!localStorage.getItem('fractal-forge:onboarded');

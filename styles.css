@@ -13,7 +13,7 @@
   --stroke-strong: rgba(255, 255, 255, 0.16);
   --text: #e8ecf5;
   --text-dim: #9aa3b8;
-  --text-faint: #6b7385;
+  --text-faint: #7d8598;
   --accent: #7c5cff;
   --accent-2: #22d3ee;
   --accent-3: #f472b6;
@@ -195,6 +195,9 @@ body {
 }
 .panel-left { left: 14px; }
 .panel-right { right: 14px; }
+
+/* Mobile drawer backdrop — hidden on desktop, enabled in the ≤720px block. */
+.panel-backdrop { display: none; }
 
 .panel.collapsed .panel-body { display: none; }
 .panel-left.collapsed { width: auto; }
@@ -699,17 +702,78 @@ body.reduced-motion *::after {
 }
 @media (max-width: 720px) {
   :root { --topbar-h: 56px; }
-  .panel { width: calc(100vw - 28px); max-width: 320px; }
-  .panel-left { left: 14px; }
-  .panel-right { right: 14px; }
-  .panel.collapsed { width: auto; }
   .status-center { display: none; }
   .topbar-actions { gap: 5px; }
   .btn { padding: 8px 9px; font-size: 12px; }
   .export-grid { grid-template-columns: 1fr; }
+
+  /* Panels become overlay drawers so the artwork stays visible. */
+  .panel {
+    top: var(--topbar-h);
+    bottom: 0;
+    width: min(85vw, 340px);
+    z-index: 30;
+    border-radius: 0;
+    box-shadow: 0 0 44px rgba(0, 0, 0, 0.6);
+  }
+  .panel-left { left: 0; border-radius: 0 var(--radius) var(--radius) 0; }
+  .panel-right { right: 0; border-radius: var(--radius) 0 0 var(--radius); }
+
+  /* Collapsed: a narrow edge tab with a vertical title. */
+  .panel.collapsed { width: 46px; }
+  .panel.collapsed .panel-head {
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 8px;
+  }
+  .panel.collapsed .panel-head h2 {
+    writing-mode: vertical-rl;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    max-height: none;
+  }
+  .panel.collapsed .panel-body { display: none; }
+
+  /* Backdrop behind an open drawer. */
+  .panel-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    background: rgba(4, 5, 10, 0.5);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .panel-backdrop.show { opacity: 1; pointer-events: auto; }
+
+  /* Larger touch targets on small screens. */
+  .panel-collapse, .mini-btn, .modal-close, .gc-fav, .gc-del { min-width: 40px; min-height: 40px; }
+  .mode-item, .palette-swatch { min-height: 40px; }
 }
 @media (max-width: 480px) {
   .brand-mark { width: 34px; height: 34px; }
-  .brand-text h1 { font-size: 14px; }
+  .brand-text { display: none; }
+  .topbar { padding: 0 10px; gap: 8px; }
+  .topbar-actions { gap: 4px; }
+  .btn { padding: 8px 8px; }
+  .btn .ico { font-size: 14px; }
   .status-left .status-chip:last-child { display: none; }
+}
+
+/* Landscape phones: short height — compress the chrome so the artwork and
+   panels keep usable room. */
+@media (max-height: 520px) and (orientation: landscape) {
+  :root { --topbar-h: 48px; --statusbar-h: 34px; }
+  .brand-mark { width: 30px; height: 30px; }
+  .brand-text p { display: none; }
+  .btn .lbl { display: none; }
+  .btn { padding: 7px 9px; }
+  .panel { top: var(--topbar-h); bottom: var(--statusbar-h); }
+  .panel-head { padding: 10px 14px; }
+  .panel-body { padding: 10px 14px 14px; }
+  .modal { max-height: 92vh; }
 }

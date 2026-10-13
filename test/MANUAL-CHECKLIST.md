@@ -44,9 +44,15 @@ with WebGL enabled, and work through each item. Mark each box as you verify.
 - [ ] Reduced-motion preference freezes time-based animation but keeps a static frame.
 - [ ] High-contrast preference changes the palette rendering.
 
-## Viewports
-- [ ] Desktop viewport (≥1280px) layout is correct.
-- [ ] Mobile viewport (≤480px) layout is usable; panels are reachable.
+## Viewports & responsive layout
+- [ ] Desktop viewport (≥1280px) layout is correct; both side panels sit beside the artwork.
+- [ ] Tablet viewport (~1024px) layout is usable.
+- [ ] Mobile portrait (≤480px): both panels start **collapsed** as narrow edge tabs so the artwork is fully visible.
+- [ ] Tapping an edge tab opens that panel as a full-height drawer with a dimmed backdrop.
+- [ ] Tapping the backdrop (or the panel's collapse button) closes the drawer and restores the artwork.
+- [ ] The top bar buttons fit without overflowing or wrapping on a 390px-wide viewport.
+- [ ] Mobile landscape (short height): the top bar / status bar compress and the panels remain usable.
+- [ ] At 200% browser zoom the layout still adapts (no clipped or unreachable controls).
 - [ ] Resizing the window re-renders without a crash (debounced buffer rebuild).
 
 ## Context loss (best effort)
