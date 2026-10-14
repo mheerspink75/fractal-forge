@@ -1480,14 +1480,17 @@ const Interaction = (() => {
         case '+': case '=': onAction('zoom', [1.2]); break;
         case '-': case '_': onAction('zoom', [1 / 1.2]); break;
         case ' ': e.preventDefault(); onAction('pause'); break;
-        case 'r': case 'R': onAction('randomize'); break;
-        case 'n': case 'N': onAction('newworld'); break;
-        case 's': case 'S': onAction('share'); break;
-        case 'e': case 'E': onAction('export'); break;
-        case 'g': case 'G': onAction('gallery'); break;
-        case 'a': case 'A': onAction('audio'); break;
+        // App action keys: suppressed while a modal is open (focus is trapped
+        // there) so they don't fire the action behind the dialog. Arrows, zoom,
+        // and Space (pause) are intentionally left ungated.
+        case 'r': case 'R': if (!UI.isAnyModalOpen()) onAction('randomize'); break;
+        case 'n': case 'N': if (!UI.isAnyModalOpen()) onAction('newworld'); break;
+        case 's': case 'S': if (!UI.isAnyModalOpen()) onAction('share'); break;
+        case 'e': case 'E': if (!UI.isAnyModalOpen()) onAction('export'); break;
+        case 'g': case 'G': if (!UI.isAnyModalOpen()) onAction('gallery'); break;
+        case 'a': case 'A': if (!UI.isAnyModalOpen()) onAction('audio'); break;
         default:
-          if (key >= '1' && key <= '9') onAction('palette', [parseInt(key, 10) - 1]);
+          if (key >= '1' && key <= '9' && !UI.isAnyModalOpen()) onAction('palette', [parseInt(key, 10) - 1]);
       }
     });
   }
@@ -2169,6 +2172,10 @@ const UI = (() => {
 
   function topModal() { return modalStack[modalStack.length - 1] || null; }
 
+  // True while at least one modal is open; used to gate keyboard action keys
+  // so they don't fire the app action behind an open dialog.
+  function isAnyModalOpen() { return modalStack.length > 0; }
+
   function trapFocus(e) {
     const id = topModal();
     if (!id) return;
@@ -2334,7 +2341,7 @@ const UI = (() => {
   // ---------- Sliders ----------
   // Each slider maps to a State key with a value transform.
   const SLIDERS = [
-    { id: 'grad-phase',    key: 'palettePhase', scale: 0.001, val: 'val-grad-phase',    fmt: (v) => Math.round(v * 1000) },
+    { id: 'grad-phase',    key: 'palettePhase', scale: 0.001, val: null,                fmt: (v) => Math.round(v * 1000) },
     { id: 'grad-speed',    key: 'paletteSpeed', scale: 0.01,  val: null,                fmt: (v) => Math.round(v * 100) },
     { id: 'grad-contrast', key: 'contrast',     scale: 0.01,  val: null,                fmt: (v) => Math.round(v * 100) },
     { id: 'ctl-iterations',key: 'iterations',   scale: 1,     val: 'val-iterations',    fmt: (v) => Math.round(v) },
@@ -2682,7 +2689,7 @@ const UI = (() => {
   }
 
   return {
-    toast, openModal, closeModal, closeAllModals, openSaveModal, openConfirm,
+    toast, openModal, closeModal, closeAllModals, openSaveModal, openConfirm, isAnyModalOpen,
     updateStatus, updateZoomStatus, updateFps,
     populateModes, highlightMode, populatePalettes, highlightPalette, updateGradientBar,
     renderGallery, setExportProgress, syncSliders, syncSettings, renderModeSpecific,
