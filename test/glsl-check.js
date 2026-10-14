@@ -73,5 +73,14 @@ for (const name of SHADERS) {
   check(name + ' all uniforms declared', missing.length === 0, 'missing: ' + missing.join(', '));
 }
 
+// Regression guard: u_detail must be *used* by a fractal shader body, not
+// merely declared (in COMMON) and set (in Engine). Before the Detail fix each
+// fractal shader had exactly one u_detail (the declaration); wiring it into
+// palette() yields two or more.
+const FRACTAL = ['MANDELBROT', 'JULIA', 'BURNING_SHIP', 'NEWTON', 'SIERPINSKI',
+  'COSMIC_NEBULA', 'DREAMSCAPE', 'NEURAL_BLOOM', 'QUANTUM_FIELD', 'MANDELBULB'];
+const detailUsed = FRACTAL.some((n) => ((S[n] || '').match(/\bu_detail\b/g) || []).length >= 2);
+check('u_detail is used by a fractal shader (Detail control wired)', detailUsed, 'no fractal shader references u_detail beyond its declaration');
+
 console.log(failures === 0 ? '\nALL GLSL SANITY CHECKS PASSED' : `\n${failures} GLSL CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
