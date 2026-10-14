@@ -223,5 +223,20 @@ console.log('--- Gallery (localStorage + schema migration) ---');
   localStorageMock.removeItem('fractal-forge:gallery');
 }
 
+console.log('--- Exporter (D4: export path honors live time) ---');
+{
+  // The export/thumbnail entry points must accept a time argument so callers
+  // can supply the live frame time (default 0 keeps old callers working).
+  check('renderToCanvas accepts a time param', M.Exporter.renderToCanvas.length >= 3);
+  check('renderToDataURL accepts a time param', M.Exporter.renderToDataURL.length >= 3);
+  check('download accepts a time param', M.Exporter.download.length >= 4);
+  check('Gallery.save accepts a time param', M.Gallery.save.length >= 2);
+  // App exposes the live time so the on-screen composition can be exported.
+  check('App.getLiveTime is a function', typeof M.App.getLiveTime === 'function');
+  check('App.getLiveTime returns a finite number (starts at 0)', Number.isFinite(M.App.getLiveTime()));
+  // The old "always time 0" default must be gone from the export source.
+  check('export path no longer forces time: s.time || 0', src.indexOf('time: s.time || 0') === -1);
+}
+
 console.log(`\n${fail === 0 ? 'ALL FUNCTIONAL TESTS PASSED' : 'SOME TESTS FAILED'} — ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

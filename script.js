@@ -1715,7 +1715,7 @@ const Share = (() => {
 const Exporter = (() => {
   // Render the current world to a 2D canvas at (w, h).
   // Preserves the on-screen framing by scaling zoom with height.
-  function renderToCanvas(w, h) {
+  function renderToCanvas(w, h, time) {
     w = Math.round(w); h = Math.round(h);
     if (!Number.isFinite(w) || !Number.isFinite(h) || w < 16 || h < 16) {
       throw new Error('Invalid export dimensions');
@@ -1735,7 +1735,7 @@ const Exporter = (() => {
 
       const params = Object.assign({}, s, {
         zoom: exportZoom,
-        time: s.time || 0,
+        time: (time != null) ? time : 0,
         audio: [0, 0, 0],
         highContrast: A11y.get().highContrast ? 1 : 0,
         mouse: [0.5, 0.5],
@@ -1773,13 +1773,13 @@ const Exporter = (() => {
     }
   }
 
-  function renderToDataURL(w, h) {
-    return renderToCanvas(w, h).toDataURL('image/png');
+  function renderToDataURL(w, h, time) {
+    return renderToCanvas(w, h, time).toDataURL('image/png');
   }
 
   // Trigger a browser download of the current world at (w, h).
-  function download(w, h, filename) {
-    const url = renderToDataURL(w, h);
+  function download(w, h, filename, time) {
+    const url = renderToDataURL(w, h, time);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename || `fractal-forge-${w}x${h}.png`;
@@ -1836,23 +1836,23 @@ const Gallery = (() => {
     }
   }
 
-  function makeThumb() {
+  function makeThumb(time) {
     try {
-      const c = Exporter.renderToCanvas(THUMB_W, THUMB_H);
+      const c = Exporter.renderToCanvas(THUMB_W, THUMB_H, time);
       return c.toDataURL('image/jpeg', 0.8);
     } catch (e) {
       return '';
     }
   }
 
-  function save(name) {
+  function save(name, time) {
     const items = load();
     const item = {
       id: 'ff-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e6).toString(36),
       name: name || (Fractals.get(State.get().mode).label + ' #' + (items.length + 1)),
       createdAt: Date.now(),
       favorite: false,
-      thumb: makeThumb(),
+      thumb: makeThumb(time),
       state: State.clone(),
     };
     items.unshift(item);
@@ -2805,7 +2805,7 @@ const App = (() => {
 
   // Save the current world to the local gallery with a thumbnail.
   function saveArtwork(name) {
-    const result = Gallery.save(name);
+    const result = Gallery.save(name, getLiveTime());
     if (result.ok) {
       UI.closeModal('modal-save');
       if (result.trimmed > 0) {
@@ -2902,7 +2902,7 @@ const App = (() => {
     UI.setExportProgress(15, 'Rendering ' + w + '×' + h + '…');
     setTimeout(() => {
       try {
-        Exporter.download(w, h);
+        Exporter.download(w, h, null, getLiveTime());
         UI.setExportProgress(100, 'Done — check your downloads');
         UI.toast('Exported ' + w + '×' + h, 'ok');
       } catch (e) {
@@ -3121,9 +3121,13 @@ const App = (() => {
     requestAnimationFrame(loop);
   }
 
+  // Expose the live animation time so the export/thumbnail path can render
+  // the exact on-screen composition instead of forcing time = 0.
+  function getLiveTime() { return time; }
+
   return {
     init, setMode, randomize, newWorld, share, toggleAudio, saveArtwork,
-    galleryRestore, importCode, exportAt, togglePause,
+    galleryRestore, importCode, exportAt, togglePause, getLiveTime,
   };
 })();
 
