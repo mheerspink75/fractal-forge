@@ -34,7 +34,7 @@ exactly from a short share code.
 | **3D** | Mandelbulb — real-time raymarched distance-estimation fractal with orbit camera |
 
 ### Interaction
-- **Deep zoom** (up to 10⁹×) with high-precision rendering, **drag to pan**, **double-click to focus**
+- **Deep zoom** (the zoom scale caps at 10⁹×) with smooth, continuous escape coloring. The math is 32-bit `highp float`, so very deep zooms show the familiar deep-zoom precision artifacts rather than lossless detail — **drag to pan**, **double-click to focus**
 - **Touch**: pinch-to-zoom and pan gestures, mobile-optimized
 - **Pause / resume** animation at any time
 - **Randomize** — new colors, formulas, animation behavior, and composition in one click
@@ -106,7 +106,7 @@ Keyboard navigation · reduced-motion option · high-contrast mode · responsive
 ## 🚀 Getting Started
 
 ### Requirements
-Any modern browser with **WebGL** enabled. Tested against the current stable releases of
+Any modern browser with **WebGL** enabled. Designed for and manually tested on recent
 **Chrome, Edge, Firefox, and Safari**; older or WebGL-disabled browsers will show a graceful
 "WebGL is not supported" message instead of the render. No build tools, no package manager, no
 server required.
