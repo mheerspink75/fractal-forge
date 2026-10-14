@@ -185,8 +185,7 @@ close, and the background UI is made inert while a modal is open.
 ├── script.js         # All application logic (20 namespaced modules)
 ├── package.json      # `npm test` entry point (no runtime dependencies)
 ├── assets/
-│   ├── favicon.svg
-│   └── logo.svg
+│   └── favicon.svg
 ├── test/
 │   ├── functional.js     # Pure-logic test suite (share, state, gallery, L-systems)
 │   ├── smoke.js          # Module API smoke test

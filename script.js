@@ -347,7 +347,6 @@ const Shaders = (() => {
     uniform float u_contrast;
     uniform vec3  u_audio;       // bass, mid, treble
     uniform float u_high_contrast;
-    uniform vec2  u_mouse;
 
     vec3 palette(float t) {
       // Detail control (u_detail, [0,1], default 0.5): scales the palette
@@ -1048,7 +1047,6 @@ const Engine = (() => {
     GL.setUniform('u_contrast', params.contrast, prog);
     GL.setUniform('u_audio', params.audio, prog);
     GL.setUniform('u_high_contrast', params.highContrast, prog);
-    GL.setUniform('u_mouse', params.mouse, prog);
 
     // Mode-specific uniforms.
     if (mode.shader === 'MANDELBULB') {
@@ -1741,7 +1739,6 @@ const Exporter = (() => {
         time: (time != null) ? time : 0,
         audio: [0, 0, 0],
         highContrast: A11y.get().highContrast ? 1 : 0,
-        mouse: [0.5, 0.5],
         camPos: Camera.camPos,
         camTarget: Camera.camTarget,
       });
@@ -2710,7 +2707,6 @@ const App = (() => {
   let renderScale = 1.0;
   let renderW = 0, renderH = 0;
   let audioBands = [0, 0, 0];   // [bass, mid, treble]
-  let mouse = [0.5, 0.5];
 
   const $ = (id) => document.getElementById(id);
 
@@ -2974,10 +2970,10 @@ const App = (() => {
   }
 
   // ---------- Adaptive quality ----------
-  function adaptQuality(dt, now) {
+  function adaptQuality(dt, now, a11y) {
     const inst = 1 / Math.max(dt, 0.001);
     fpsSmooth = fpsSmooth * 0.9 + inst * 0.1;
-    if (!A11y.get().adaptive) {
+    if (!a11y.adaptive) {
       if (qualityIndex !== 0) { qualityIndex = 0; setRenderScale(QUALITY_LEVELS[0]); }
       return;
     }
@@ -3003,8 +2999,11 @@ const App = (() => {
     lastTime = now;
     // GPU context lost: skip rendering until it is restored.
     if (GL.contextLost) return;
+    // Snapshot A11y once per frame so repeated reads below don't each build a
+    // fresh Object.assign copy (behavior identical, fewer per-frame allocations).
+    const a11y = A11y.get();
     // Reduced motion freezes time-based animation but keeps a static frame.
-    const reduced = A11y.get().reducedMotion;
+    const reduced = a11y.reducedMotion;
     if (!paused && !reduced) time += dt;
 
     if (Audio.isEnabled()) {
@@ -3022,7 +3021,7 @@ const App = (() => {
     ColorSystem.state.cycling = reduced ? false : !!s.cycling;
     if (!reduced) ColorSystem.tick(dt);
     Ambient.tick(dt);
-    adaptQuality(dt, now);
+    adaptQuality(dt, now, a11y);
     const params = {
       time,
       center: s.center,
@@ -3042,8 +3041,7 @@ const App = (() => {
       growth: s.growth,
       juliaPhase: s.juliaPhase,
       audio: audioBands,
-      highContrast: A11y.get().highContrast ? 1 : 0,
-      mouse,
+      highContrast: a11y.highContrast ? 1 : 0,
       camPos: Camera.camPos,
       camTarget: Camera.camTarget,
     };
@@ -3106,11 +3104,6 @@ const App = (() => {
         syncCamera();
       },
       onAction: handleAction,
-    });
-
-    // Track normalized mouse for the u_mouse uniform.
-    window.addEventListener('mousemove', (e) => {
-      mouse = [e.clientX / window.innerWidth, 1 - e.clientY / window.innerHeight];
     });
 
     Ambient.init($('ambient-canvas'));
