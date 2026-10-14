@@ -350,7 +350,11 @@ const Shaders = (() => {
     uniform vec2  u_mouse;
 
     vec3 palette(float t) {
-      return u_pal_a + u_pal_b * cos(6.28318530718 * (u_pal_c * t + u_pal_d));
+      // Detail control (u_detail, [0,1], default 0.5): scales the palette
+      // color-frequency. Neutral at the default (s == 1.0, render unchanged);
+      // higher adds fine detail, lower softens it.
+      float s = 1.0 + 0.5 * (u_detail - 0.5);
+      return u_pal_a + u_pal_b * cos(6.28318530718 * (u_pal_c * (t * s) + u_pal_d));
     }
 
     float hash21(vec2 p) {
