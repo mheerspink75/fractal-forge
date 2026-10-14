@@ -82,5 +82,12 @@ const FRACTAL = ['MANDELBROT', 'JULIA', 'BURNING_SHIP', 'NEWTON', 'SIERPINSKI',
 const detailUsed = FRACTAL.some((n) => ((S[n] || '').match(/\bu_detail\b/g) || []).length >= 2);
 check('u_detail is used by a fractal shader (Detail control wired)', detailUsed, 'no fractal shader references u_detail beyond its declaration');
 
+// Regression guard (D3): u_seed must be *used* by every GPU fractal body, not
+// merely declared in COMMON and set in Engine. The declaration counts as one
+// occurrence in S[name]; a real body usage makes the count >= 2 for each mode.
+const seedMissing = FRACTAL.filter((n) => ((S[n] || '').match(/\bu_seed\b/g) || []).length < 2);
+check('u_seed is used by every GPU fractal shader (seed drives all modes)', seedMissing.length === 0,
+  'missing: ' + (seedMissing.join(', ') || 'none'));
+
 console.log(failures === 0 ? '\nALL GLSL SANITY CHECKS PASSED' : `\n${failures} GLSL CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

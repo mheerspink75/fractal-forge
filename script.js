@@ -405,6 +405,8 @@ const Shaders = (() => {
   const MANDELBROT = COMMON + `
     void main() {
       vec2 c = toFractal();
+      // Seed-driven view offset (bounded, continuous, deterministic in u_seed).
+      c += vec2(0.06 * sin(u_seed * 1.7), 0.06 * cos(u_seed * 2.3));
       vec2 z = vec2(0.0);
       float escape = -1.0;
       for (int i = 0; i < 4096; i++) {
@@ -446,6 +448,8 @@ const Shaders = (() => {
   const BURNING_SHIP = COMMON + `
     void main() {
       vec2 c = toFractal();
+      // Seed-driven view offset (bounded, continuous, deterministic in u_seed).
+      c += vec2(0.06 * sin(u_seed * 2.1), 0.06 * cos(u_seed * 1.9));
       vec2 z = vec2(0.0);
       float escape = -1.0;
       for (int i = 0; i < 4096; i++) {
@@ -466,13 +470,16 @@ const Shaders = (() => {
     void main() {
       vec2 c = toFractal();
       vec2 z = c;
+      // Seed picks the target root (a unit-circle point); rotating the root
+      // configuration changes the basin layout deterministically.
+      vec2 target = vec2(cos(u_seed * 1.3), sin(u_seed * 1.7));
       float escape = -1.0;
       int root = 0;
       for (int i = 0; i < 200; i++) {
         if (i >= u_iterations) break;
         vec2 z2 = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y);
         vec2 z3 = vec2(z2.x * z.x - z2.y * z.y, z2.x * z.y + z2.y * z.x);
-        vec2 num = z3 - vec2(1.0, 0.0);
+        vec2 num = z3 - target;
         vec2 den = 3.0 * z2;
         float dd = dot(den, den);
         if (dd < 1e-12) break;
@@ -500,6 +507,8 @@ const Shaders = (() => {
   const SIERPINSKI = COMMON + `
     void main() {
       vec2 p = toFractal();
+      // Seed-driven domain offset (bounded, continuous, deterministic in u_seed).
+      p += vec2(0.05 * sin(u_seed * 2.7), 0.05 * cos(u_seed * 3.1));
       float ang = u_time * 0.05 * u_anim;
       float s = sin(ang), c = cos(ang);
       p = mat2(c, -s, s, c) * p;
@@ -523,6 +532,8 @@ const Shaders = (() => {
   const COSMIC_NEBULA = COMMON + `
     void main() {
       vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
+      // Seed shifts the nebula field (bounded, continuous, deterministic in u_seed).
+      uv += vec2(0.15 * sin(u_seed * 1.1), 0.15 * cos(u_seed * 1.9));
       float t = u_time * 0.05 * u_anim;
       vec2 q = vec2(fbm(uv * 2.0 + t), fbm(uv * 2.0 - t + 5.0));
       vec2 r = vec2(fbm(uv * 2.0 + q * 2.0 + 1.7 + t), fbm(uv * 2.0 + q * 2.0 + 4.3 - t));
@@ -585,9 +596,11 @@ const Shaders = (() => {
     void main() {
       vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
       float t = u_time * 0.2 * u_anim;
-      float a = sin(uv.x * 8.0 + t) * cos(uv.y * 8.0 - t);
-      float b = sin(length(uv) * 12.0 - t * 2.0);
-      float c = sin((uv.x + uv.y) * 6.0 + t * 1.5);
+      // Seed shifts the interference phase (bounded, continuous in u_seed).
+      float ph = 0.4 * u_seed;
+      float a = sin(uv.x * 8.0 + t + ph) * cos(uv.y * 8.0 - t + ph);
+      float b = sin(length(uv) * 12.0 - t * 2.0 + ph);
+      float c = sin((uv.x + uv.y) * 6.0 + t * 1.5 + ph);
       float field = (a + b + c) / 3.0;
       float interference = smoothstep(0.0, 1.0, abs(field));
       vec3 col = palette(field * 0.5 + 0.5 + u_palette_phase);
@@ -629,6 +642,11 @@ const Shaders = (() => {
     void main() {
       vec3 ro = u_cam_pos;
       vec3 ww = normalize(u_cam_target - ro);
+      // Seed rotates the camera orbit around the vertical axis (bounded isometry,
+      // continuous in u_seed), changing which side of the bulb is seen.
+      float sa = 0.4 * u_seed;
+      float cs = cos(sa), sn = sin(sa);
+      ww = normalize(vec3(ww.x * cs + ww.z * sn, ww.y, -ww.x * sn + ww.z * cs));
       vec3 uu = normalize(cross(ww, vec3(0.0, 1.0, 0.0)));
       vec3 vv = cross(uu, ww);
       vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
