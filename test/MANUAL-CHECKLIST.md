@@ -49,6 +49,10 @@ with WebGL enabled, and work through each item. Mark each box as you verify.
 ## Modals & accessibility
 - [ ] Modals open and close correctly (button, Escape, and backdrop).
 - [ ] Focus is trapped inside an open modal and restored to the opener on close.
+- [ ] **Action keys are inert behind a modal (D10):** with a modal open (e.g. Settings
+      or the Save dialog), pressing `r`/`n`/`s`/`e`/`g`/`a` or `1`–`9` does **not**
+      trigger the app action behind it; arrow-key panning, `+`/`-` zoom, and Space (pause)
+      still work. (Real-browser check.)
 - [ ] Keyboard-disable (Settings) does **not** disable pointer/touch controls.
 - [ ] Reduced-motion preference freezes time-based animation but keeps a static frame.
 - [ ] High-contrast preference changes the palette rendering.

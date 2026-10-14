@@ -23,7 +23,7 @@ const documentMock = {
   readyState: 'complete',
   getElementById(id) { return elements[id] || (elements[id] = makeEl(id)); },
   querySelector() { return makeEl('q'); }, querySelectorAll() { return []; },
-  createElement(tag) { return makeEl(tag); }, addEventListener() {},
+  createElement(tag) { return makeEl(tag); }, addEventListener() {}, removeEventListener() {},
   body: makeEl('body'), documentElement: makeEl('html'),
 };
 const storage = {};
@@ -190,6 +190,17 @@ console.log('--- Share (boundary validation and clamping) ---');
   // Unknown keys are not copied (no prototype-pollution-style data).
   const out3 = M.Share.sanitize({ __proto__: { hacked: true }, zoom: 10 });
   check('unknown keys not copied', out3.hacked === undefined);
+
+  // D5: the Iterations bounds the slider now exposes (min=16 max=4096) must be
+  // preserved by sanitize, so a valid share code in the full range round-trips
+  // to a slider value that matches the state (previously (16,32) and (2048,4096]
+  // disagreed with the old slider min=32 max=2048).
+  check('iterations 16 (min) survives', M.Share.sanitize({ iterations: 16 }).iterations === 16);
+  check('iterations 31 (was below old slider min) survives', M.Share.sanitize({ iterations: 31 }).iterations === 31);
+  check('iterations 3000 (was above old slider max) survives', M.Share.sanitize({ iterations: 3000 }).iterations === 3000);
+  check('iterations 4096 (max) survives', M.Share.sanitize({ iterations: 4096 }).iterations === 4096);
+  check('iterations 4097 clamps to 4096', M.Share.sanitize({ iterations: 4097 }).iterations === 4096);
+  check('iterations 15 clamps to 16', M.Share.sanitize({ iterations: 15 }).iterations === 16);
 }
 
 console.log('--- A11y ---');
@@ -236,6 +247,44 @@ console.log('--- Exporter (D4: export path honors live time) ---');
   check('App.getLiveTime returns a finite number (starts at 0)', Number.isFinite(M.App.getLiveTime()));
   // The old "always time 0" default must be gone from the export source.
   check('export path no longer forces time: s.time || 0', src.indexOf('time: s.time || 0') === -1);
+}
+
+console.log('--- Interaction (D10: action keys gated while a modal is open) ---');
+{
+  // Capture window keydown handlers so we can drive the keyboard gate directly.
+  const keydowns = [];
+  sandbox.window.addEventListener = (type, fn) => { if (type === 'keydown') keydowns.push(fn); };
+
+  const actions = [];
+  M.Interaction.register({ onAction: (a, d) => actions.push(a) });
+  M.Interaction.init({ addEventListener() {} }); // mock canvas; only keydown matters
+
+  const fire = (key) => keydowns.forEach((fn) => fn({ key, target: { tagName: 'BODY' }, preventDefault() {} }));
+
+  check('isAnyModalOpen() false with no modal', M.UI.isAnyModalOpen() === false);
+
+  // No modal open: action keys dispatch.
+  actions.length = 0;
+  fire('r');
+  check('no modal: "r" (randomize) dispatches', actions.includes('randomize'));
+
+  // Open a modal: action keys suppressed; arrows/zoom/space still work.
+  M.UI.openModal('modal-settings');
+  check('isAnyModalOpen() true with a modal', M.UI.isAnyModalOpen() === true);
+  actions.length = 0;
+  fire('r'); fire('e'); fire('s'); fire('g'); fire('1'); fire('9');
+  check('modal open: action keys (r/e/s/g/1/9) suppressed', actions.length === 0);
+  actions.length = 0;
+  fire('ArrowLeft'); fire('+'); fire(' ');
+  check('modal open: pan/zoom/space still dispatch',
+    actions.includes('pan') && actions.includes('zoom') && actions.includes('pause'));
+
+  // Close the modal: action keys dispatch again.
+  M.UI.closeModal('modal-settings');
+  check('isAnyModalOpen() false after close', M.UI.isAnyModalOpen() === false);
+  actions.length = 0;
+  fire('r');
+  check('modal closed: "r" dispatches again', actions.includes('randomize'));
 }
 
 console.log(`\n${fail === 0 ? 'ALL FUNCTIONAL TESTS PASSED' : 'SOME TESTS FAILED'} — ${pass} passed, ${fail} failed`);
