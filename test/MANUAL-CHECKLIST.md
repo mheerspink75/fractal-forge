@@ -41,6 +41,10 @@ with WebGL enabled, and work through each item. Mark each box as you verify.
 ## Export
 - [ ] Export completes at a modest test resolution (e.g. 1024×1024) and downloads a PNG.
 - [ ] A second export click while one is in progress does not start a duplicate.
+- [ ] **Export matches the screen (D4):** animate a time-based mode (e.g. Dreamscape or
+      Quantum Field), pause mid-motion, then export — the PNG matches the on-screen
+      composition (not the `time = 0` frame). Save to gallery and confirm the thumbnail
+      also matches. (Real-browser check — pixel comparison.)
 
 ## Modals & accessibility
 - [ ] Modals open and close correctly (button, Escape, and backdrop).
