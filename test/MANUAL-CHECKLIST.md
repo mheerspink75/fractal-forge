@@ -22,6 +22,11 @@ with WebGL enabled, and work through each item. Mark each box as you verify.
 ## State & randomize
 - [ ] Randomize changes the image and synchronizes palette + camera state.
 - [ ] New World resets to a fresh, valid state.
+- [ ] **Seed drives every GPU mode:** change the seed (Randomize, or import a share code
+      with a different seed) and confirm the composition changes in *all* GPU modes —
+      Mandelbrot, Julia, Burning Ship, Newton, Sierpinski, Cosmic Nebula, Dreamscape,
+      Neural Bloom, Quantum Field, Mandelbulb — while the render stays stable (no
+      flicker, NaNs, or broken geometry). (D3 — real-browser check.)
 
 ## Share codes
 - [ ] A share code can be generated (export) and copied.
