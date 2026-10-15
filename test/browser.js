@@ -44,6 +44,9 @@ const ACTION_KEYS = ['r', 'n', 's', 'e', 'g', 'a', '1', '2', '3', '4', '5', '6',
 const VIEWPORT = { width: 1280, height: 720 };
 const GRID = 64;                    // downsample size for pixel comparisons
 const MATCH_CAP = 45;               // screen-vs-export MAE must stay below this
+// A broken seed (mode ignores u_seed) yields near-identical frames: measured jitter
+// is ~0.2 while a working seed change moves composition by >= 2.5 (64x64 downsample).
+const SEED_MAE_FLOOR = 1.5;         // seed-driven MAE must stay above this
 const SEED_STEP = 7919;             // a prime offset that always changes the seed
 const LAUNCH_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-gpu-sandbox'];
 const OVERLAYS = '.topbar,.panel-left,.panel-right,.statusbar,.fx-overlay,.onboarding';
@@ -163,7 +166,8 @@ async function runTarget(name, url, evidenceBase) {
       await page.evaluate((step) => { const s = State.get(); State.set({ seed: (s.seed + step) >>> 0 }); }, SEED_STEP);
       await page.waitForTimeout(settle);
       const B = await capture(page, evidenceDir, 'd3-' + id + '-after');
-      ok('D3 ' + id + ': seed change alters the composition', sha(A) !== sha(B), 'seed ' + seedBefore + ' \u2192 ' + (((seedBefore + SEED_STEP) >>> 0)));
+      const seedMAE = mae(downsample(decode(A), GRID), downsample(decode(B), GRID));
+      ok('D3 ' + id + ': seed change alters the composition', seedMAE > SEED_MAE_FLOOR, 'seed ' + seedBefore + ' \u2192 ' + (((seedBefore + SEED_STEP) >>> 0)) + '  seedMAE=' + seedMAE.toFixed(2) + ' (floor ' + SEED_MAE_FLOOR + ', jitter \u2248 0.2)');
       const aStat = frameStats(decode(A)), bStat = frameStats(decode(B));
       ok('D3 ' + id + ': render stays stable (non-blank, not broken)', isValidFrame(decode(A)) && isValidFrame(decode(B)), 'A ' + JSON.stringify(aStat) + '  B ' + JSON.stringify(bStat));
     }
@@ -204,6 +208,9 @@ async function runTarget(name, url, evidenceBase) {
     ok('D10: settings modal is open (key gate active)', openState.anyOpen === true, 'isAnyModalOpen=' + openState.anyOpen);
 
     const before = await page.evaluate(() => ({ mode: State.get().mode, seed: State.get().seed, palette: State.get().palette, audio: document.getElementById('btn-audio').getAttribute('aria-pressed') }));
+    // Clear toasts left over from the D4 phase (transient UI, 2.6s lifetime) so
+    // the "no action fired" check below only sees toasts these keypresses make.
+    await page.evaluate(() => { const s = document.getElementById('toast-stack'); if (s) s.innerHTML = ''; });
     for (const k of ACTION_KEYS) { await page.keyboard.press(k); await page.waitForTimeout(70); }
     await page.waitForTimeout(200);
     const after = await page.evaluate(() => ({

@@ -290,9 +290,37 @@ This runs three suites:
 | `test/smoke.js` | All 20 modules are defined and expose their expected public APIs |
 | `test/glsl-check.js` | Every shader has balanced braces/parens and declares the uniforms it uses |
 
-> **Browser behavior** (rendering, gestures, modals, audio) is covered by the manual checklist in
-> [`test/MANUAL-CHECKLIST.md`](test/MANUAL-CHECKLIST.md), since the automated suite runs headless
-> without a WebGL context.
+> **Browser behavior** (rendering, gestures, modals, audio) is covered by the automated
+> Playwright suite below, with the manual checklist in
+> [`test/MANUAL-CHECKLIST.md`](test/MANUAL-CHECKLIST.md) as a backup.
+
+### Real-browser checks (Playwright)
+
+The Node suite can't run WebGL, so `test/browser.js` drives real headless Chromium
+(Playwright + software WebGL via SwiftShader) and verifies the checks only a real browser can:
+
+- **D3** — the seed drives **every** GPU mode (all 10 modes render a valid frame and change
+  composition when the seed changes),
+- **D4** — export matches the on-screen composition at **live** animation time (not `time = 0`),
+- **D10** — action keys are inert behind an open modal, while pan/zoom/space still work.
+
+```bash
+npm run test:browser                  # local (auto-served on :8123) + production site
+SKIP_LIVE=1 npm run test:browser      # local target only (what CI runs)
+BASE_URL=<url> npm run test:browser   # a single custom target
+```
+
+Evidence (screenshots + exported PNGs) is written to `test/.evidence/<target>/`.
+
+### CI
+
+GitHub Actions runs on every push/PR to `master` (`.github/workflows/ci.yml`). Both jobs must
+pass before a merge:
+
+| Job | What it runs |
+|---|---|
+| `test` | `npm ci` + `npm test` (functional + smoke + glsl-check) |
+| `browser` | `npm ci` + `npx playwright install --with-deps chromium` + `SKIP_LIVE=1 npm run test:browser` (tests the PR's own files, not the production site) |
 
 ---
 
