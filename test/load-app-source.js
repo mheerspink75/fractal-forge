@@ -1,10 +1,10 @@
-/* Loads the app's ES module graph (entry: script.js) and concatenates the
+/* Loads the app's ES module graph (entry: src/main.js) and concatenates the
    files in dependency order with import/export syntax stripped, so the
    vm-based harnesses (functional/smoke/glsl-check) can run the real app
    source in a single script scope.
 
-   The module style this relies on (keep it when editing src/*.js and
-   script.js): imports are single-line `import { X } from './y.js';`, and
+   The module style this relies on (keep it when editing src/*.js):
+   imports are single-line `import { X } from './y.js';`, and
    exports are `export const X = ...` or `export { ... };`. */
 const fs = require('fs');
 const path = require('path');

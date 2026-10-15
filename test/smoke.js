@@ -1,10 +1,10 @@
-/* Smoke test: load script.js in a mocked browser environment and verify
+/* Smoke test: load the app module graph (entry src/main.js) in a mocked browser environment and verify
    every module IIFE executes and exposes its expected API.
    Run with: node test/smoke.js  (or: npm test) */
 const vm = require('vm');
 const { loadAppSource } = require('./load-app-source.js');
 
-const src = loadAppSource('script.js');
+const src = loadAppSource('src/main.js');
 
 // ---- Minimal browser mocks (enough for module *definition*, not rendering) ----
 function makeEl(id) {
@@ -154,7 +154,7 @@ const exportLine =
   '\n;globalThis.__modules = { Util, GL, Shaders, ColorSystem, Fractals, Engine, LSystem, Effects, Camera, Interaction, State, Procedural, Share, Exporter, Gallery, Audio, Ambient, A11y, UI, App };\n';
 const ctx = vm.createContext(sandbox);
 try {
-  vm.runInContext(src + exportLine, ctx, { filename: 'script.js' });
+  vm.runInContext(src + exportLine, ctx, { filename: 'src/main.js' });
 } catch (e) {
   console.error('LOAD FAILED:', e && e.stack ? e.stack : e);
   process.exit(1);

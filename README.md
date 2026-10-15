@@ -182,7 +182,17 @@ close, and the background UI is made inert while a modal is open.
 /
 ├── index.html        # Document, UI panels, modals, onboarding
 ├── styles.css        # Dark glassmorphic theme, responsive layout
-├── script.js         # All application logic (20 namespaced modules)
+├── src/
+│   ├── main.js       # App entry (ES module): GL, ColorSystem, Engine, LSystem,
+│   │                 #   Effects, Interaction, Procedural, Share, Gallery, Audio,
+│   │                 #   Ambient, A11y, App + boot
+│   ├── shaders.js    # GLSL source
+│   ├── fractals.js   # mode registry + parameter sets
+│   ├── util.js       # PRNG, math, encoding helpers
+│   ├── camera.js     # pan/zoom, deep-zoom, 3D orbit
+│   ├── state.js      # render-parameter source of truth
+│   ├── exporter.js   # PNG / high-res / wallpaper rendering
+│   └── ui.js         # DOM bindings, panels, toasts, modals
 ├── package.json      # `npm test` entry point (no runtime dependencies)
 ├── assets/
 │   └── favicon.svg
@@ -201,9 +211,11 @@ close, and the background UI is made inert while a modal is open.
 > **Contributors:** the deep map — region line numbers, the invariants the tests protect, the
 > validation ladder, and deployment mechanics — lives in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-`script.js` is organized into **20 self-contained modules**, each an IIFE exposing a small public API.
-There is no global state leakage and no external dependency — the modules communicate through explicit
-function calls.
+The app is organized into **20 self-contained modules**, each an IIFE exposing a small public API.
+`src/main.js` is the entry point; `Shaders`, `Fractals`, `Util`, `Camera`, `State`, `Exporter`,
+and `UI` live in sibling files under `src/`, and the rest live in `main.js`.
+There is no global state leakage and no external dependency — the modules communicate through
+explicit function calls.
 
 | Module | Responsibility |
 |---|---|

@@ -3,7 +3,7 @@
 const vm = require('vm');
 const { loadAppSource } = require('./load-app-source.js');
 
-const src = loadAppSource('script.js');
+const src = loadAppSource('src/main.js');
 
 function makeEl(id) {
   return {
@@ -151,7 +151,7 @@ sandbox.globalThis = sandbox;
 const exportLine =
   '\n;globalThis.__m = { Util, GL, Shaders, ColorSystem, Fractals, Engine, LSystem, Effects, Camera, Interaction, State, Procedural, Share, Exporter, Gallery, Audio, Ambient, A11y, UI, App };\n';
 const ctx = vm.createContext(sandbox);
-vm.runInContext(src + exportLine, ctx, { filename: 'script.js' });
+vm.runInContext(src + exportLine, ctx, { filename: 'src/main.js' });
 const M = sandbox.__m;
 
 let pass = 0,

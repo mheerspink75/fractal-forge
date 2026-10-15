@@ -4,7 +4,7 @@
 const vm = require('vm');
 const { loadAppSource } = require('./load-app-source.js');
 
-const src = loadAppSource('script.js');
+const src = loadAppSource('src/main.js');
 
 // Minimal sandbox to load the Shaders module.
 function makeEl(id) {
@@ -147,7 +147,7 @@ sb.window.navigator = sb.navigator;
 sb.globalThis = sb;
 const exp = '\n;globalThis.__S = Shaders;\n';
 const ctx = vm.createContext(sb);
-vm.runInContext(src + exp, ctx, { filename: 'script.js' });
+vm.runInContext(src + exp, ctx, { filename: 'src/main.js' });
 const S = sb.__S;
 
 let failures = 0;

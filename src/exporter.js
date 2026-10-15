@@ -2,10 +2,10 @@
    Exporter — render the current world to an offscreen FBO at a
    fixed resolution, read the pixels back, and produce a PNG.
 
-   Depends on modules still in script.js (GL, Effects, Engine, A11y);
+   Depends on modules still in src/main.js (GL, Effects, Engine, A11y);
    the circular import is safe because every reference is at call time.
    ============================================================ */
-import { GL, Effects, Engine, A11y } from '../script.js';
+import { GL, Effects, Engine, A11y } from './main.js';
 import { Camera } from './camera.js';
 import { State } from './state.js';
 
