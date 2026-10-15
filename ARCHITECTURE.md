@@ -72,9 +72,12 @@ BASE_URL=<url> npm run test:browser # a single custom target
 - `npm test` loads the module graph (entry `src/main.js`, via `test/load-app-source.js`) in a
   `vm` sandbox with mocked DOM/WebGL — it verifies logic and module APIs, **not pixels**.
 - The browser suite runs real headless Chromium with SwiftShader WebGL; it verifies boot/render,
-  D3, the in-frame guard, D4, and D10. Evidence (screenshots + exported PNGs) lands in
-  `test/.evidence/<target>/`. Headless WebGL is slow: the Mandelbulb raymarch needs a 2500 ms
-  settle before a frame is complete.
+  D3, the in-frame guard, D4, D10, Share URL, and the golden-image pixel regression. Evidence
+  (screenshots + exported PNGs) lands in `test/.evidence/<target>/`. Headless WebGL is slow:
+  the Mandelbulb raymarch needs a 2500 ms settle before a frame is complete.
+- **Golden image:** `test/golden/mandelbrot-424242.json` is the committed 64×64 pixel baseline.
+  If the app's appearance *intentionally* changes, regenerate it with `node test/make-golden.cjs`
+  and commit the new file — otherwise the golden check is your pixel-regression guard.
 - **Gotcha (bit us before):** Node constants (`SEED_STEP`, `TIME_MODE`, …) are *not* visible
   inside `page.evaluate()` callbacks (browser scope). Pass them as arguments:
   `page.evaluate((arg) => { … }, VALUE)`.

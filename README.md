@@ -324,7 +324,12 @@ The Node suite can't run WebGL, so `test/browser.js` drives real headless Chromi
 - **D3** — the seed drives **every** GPU mode (all 10 modes render a valid frame and change
   composition when the seed changes),
 - **D4** — export matches the on-screen composition at **live** animation time (not `time = 0`),
-- **D10** — action keys are inert behind an open modal, while pan/zoom/space still work.
+- **D10** — action keys are inert behind an open modal, while pan/zoom/space still work,
+- **Share URL** — a linkable world (`?fractal=…&seed=…&palette=…&time=…&iterations=…`) restores
+  its exact state and renders a valid frame, and junk links fall back to defaults,
+- **Golden image** — a canonical scene matches a committed 64×64 pixel baseline within a tight
+  MAE cap (SwiftShader renders are ~0.2–0.5 MAE stable across fresh launches; real regressions
+  move ≥ 2.5), so visual breakage fails CI on both the local and production targets.
 
 ```bash
 npm run test:browser                  # local (auto-served on :8123) + production site
