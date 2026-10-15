@@ -639,13 +639,16 @@ const Shaders = (() => {
     }
 
     void main() {
-      vec3 ro = u_cam_pos;
-      vec3 ww = normalize(u_cam_target - ro);
-      // Seed rotates the camera orbit around the vertical axis (bounded isometry,
-      // continuous in u_seed), changing which side of the bulb is seen.
+      // The seed orbits the camera AROUND the bulb (u_cam_target) about the
+      // vertical axis, so the bulb always fills the frame and the seed only
+      // changes which side is seen.  (Rotating the look direction instead would
+      // swing the fixed camera off-axis and blank the bulb out of view for most
+      // seeds.)
+      vec3 rel = u_cam_pos - u_cam_target;
       float sa = 0.4 * u_seed;
       float cs = cos(sa), sn = sin(sa);
-      ww = normalize(vec3(ww.x * cs + ww.z * sn, ww.y, -ww.x * sn + ww.z * cs));
+      vec3 ro = u_cam_target + vec3(rel.x * cs + rel.z * sn, rel.y, -rel.x * sn + rel.z * cs);
+      vec3 ww = normalize(u_cam_target - ro);
       vec3 uu = normalize(cross(ww, vec3(0.0, 1.0, 0.0)));
       vec3 vv = cross(uu, ww);
       vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;

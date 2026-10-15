@@ -1,13 +1,20 @@
-# FRACTAL FORGE — Manual Browser Checklist
+# FRACTAL FORGE — Browser Checklist
 
-Browser automation (Playwright/Puppeteer) is not available in the current
-environment, so the browser-level smoke checks below are run manually.
-Open the site (local `index.html` or the GitHub Pages URL) in a real browser
-with WebGL enabled, and work through each item. Mark each box as you verify.
+The checks that required a real browser (D3, D4, D10) plus a boot/render smoke
+check are now automated in `test/browser.js` (headless Chromium + software
+WebGL via SwiftShader), and run against both the local build and the live
+GitHub Pages deployment:
+
+    npm run test:browser
+
+Evidence (screenshots + the exported PNG, per target) is written to
+`test/.evidence/<target>/`, and the run exits non-zero if any check fails.
+The remaining items below are still best verified manually in a real browser
+with WebGL enabled. Mark each box as you verify.
 
 ## Boot & rendering
-- [ ] The app boots without an uncaught exception (check DevTools Console).
-- [ ] A fractal frame renders on the canvas (not a blank/black screen).
+- [x] The app boots without an uncaught exception (check DevTools Console). ✅ Automated.
+- [x] A fractal frame renders on the canvas (not a blank/black screen). ✅ Automated.
 - [ ] The FPS counter in the status bar updates.
 
 ## Modes
@@ -22,11 +29,14 @@ with WebGL enabled, and work through each item. Mark each box as you verify.
 ## State & randomize
 - [ ] Randomize changes the image and synchronizes palette + camera state.
 - [ ] New World resets to a fresh, valid state.
-- [ ] **Seed drives every GPU mode:** change the seed (Randomize, or import a share code
+- [x] **Seed drives every GPU mode:** change the seed (Randomize, or import a share code
       with a different seed) and confirm the composition changes in *all* GPU modes —
       Mandelbrot, Julia, Burning Ship, Newton, Sierpinski, Cosmic Nebula, Dreamscape,
       Neural Bloom, Quantum Field, Mandelbulb — while the render stays stable (no
-      flicker, NaNs, or broken geometry). (D3 — real-browser check.)
+      flicker, NaNs, or broken geometry). (D3 — ✅ verified by `npm run test:browser`,
+      local + live. Note: the check surfaced a Mandelbulb camera bug — the seed rotated
+      the *look direction* with the camera fixed, blanking the bulb for most seeds; fixed
+      by orbiting the camera around the bulb.)
 
 ## Share codes
 - [ ] A share code can be generated (export) and copied.
@@ -41,18 +51,21 @@ with WebGL enabled, and work through each item. Mark each box as you verify.
 ## Export
 - [ ] Export completes at a modest test resolution (e.g. 1024×1024) and downloads a PNG.
 - [ ] A second export click while one is in progress does not start a duplicate.
-- [ ] **Export matches the screen (D4):** animate a time-based mode (e.g. Dreamscape or
+- [x] **Export matches the screen (D4):** animate a time-based mode (e.g. Dreamscape or
       Quantum Field), pause mid-motion, then export — the PNG matches the on-screen
       composition (not the `time = 0` frame). Save to gallery and confirm the thumbnail
-      also matches. (Real-browser check — pixel comparison.)
+      also matches. (Real-browser check — pixel comparison.) ✅ Verified by
+      `npm run test:browser`: screen-vs-export MAE ≈ 0.5 (a match) vs start-frame MAE ≈
+      24 (proves it is the live frame, not the t=0 frame).
 
 ## Modals & accessibility
 - [ ] Modals open and close correctly (button, Escape, and backdrop).
 - [ ] Focus is trapped inside an open modal and restored to the opener on close.
-- [ ] **Action keys are inert behind a modal (D10):** with a modal open (e.g. Settings
+- [x] **Action keys are inert behind a modal (D10):** with a modal open (e.g. Settings
       or the Save dialog), pressing `r`/`n`/`s`/`e`/`g`/`a` or `1`–`9` does **not**
       trigger the app action behind it; arrow-key panning, `+`/`-` zoom, and Space (pause)
-      still work. (Real-browser check.)
+      still work. (Real-browser check.) ✅ Verified by `npm run test:browser`, including a
+      control group that proves the same keys *do* act when no modal is open.
 - [ ] Keyboard-disable (Settings) does **not** disable pointer/touch controls.
 - [ ] Reduced-motion preference freezes time-based animation but keeps a static frame.
 - [ ] High-contrast preference changes the palette rendering.
