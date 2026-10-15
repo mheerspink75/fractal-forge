@@ -198,6 +198,9 @@ close, and the background UI is made inert while a modal is open.
 
 ## 🏗 Architecture
 
+> **Contributors:** the deep map — region line numbers, the invariants the tests protect, the
+> validation ladder, and deployment mechanics — lives in [ARCHITECTURE.md](ARCHITECTURE.md).
+
 `script.js` is organized into **20 self-contained modules**, each an IIFE exposing a small public API.
 There is no global state leakage and no external dependency — the modules communicate through explicit
 function calls.
