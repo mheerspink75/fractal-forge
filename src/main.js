@@ -1625,12 +1625,14 @@ const App = (() => {
     if (!Fractals.get(id)) return;
     applyModeDefaults(id);
     applyWorld();
+    syncUrl();
   }
 
   function randomize() {
     const rng = Util.mulberry32((Date.now() ^ (Math.random() * 1e9)) >>> 0);
     Procedural.randomize(rng);
     applyWorld();
+    syncUrl();
   }
 
   function newWorld() {
@@ -1640,6 +1642,7 @@ const App = (() => {
     Procedural.randomize(rng);
     applyWorld();
     UI.toast('Forged a new world', 'ok');
+    syncUrl();
   }
 
   function setPalette(i) {
@@ -1746,6 +1749,7 @@ const App = (() => {
       applyWorld();
       UI.closeModal('modal-gallery');
       UI.toast('World imported', 'ok');
+      syncUrl();
     } catch (e) {
       UI.toast('Invalid code: ' + e.message, 'error');
     }
@@ -1949,6 +1953,11 @@ const App = (() => {
 
   // ---------- Init ----------
   function init() {
+    // Restore a shared world from the URL before the first render. Invalid
+    // values are dropped (defaults stay); a valid value always wins.
+    const restored = State.parseURL(window.location && window.location.search);
+    if (restored.changed) State.set(restored.partial);
+
     const canvas = $('gl-canvas');
     GL.init(canvas);
     GL.setContextHandlers({
@@ -2011,7 +2020,7 @@ const App = (() => {
       galleryRestore,
       importCode,
       exportAt,
-      onParam: () => {},
+      onParam: () => syncUrl(),
       onSetting,
       onboarded: () => {
         try {
@@ -2022,9 +2031,24 @@ const App = (() => {
       }
     });
     UI.renderModeSpecific();
+    if (restored.changed) UI.toast('Restored world from URL', 'info');
 
     window.addEventListener('resize', onResize);
     requestAnimationFrame(loop);
+  }
+
+  // ---------- Shareable URL ----------
+  // Keep the address bar in sync with the shareable state. replaceState means
+  // we never pollute the back/forward stack on every change. Best-effort:
+  // some contexts (file://, tests) reject or lack history.
+  function syncUrl() {
+    try {
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', State.toQuery(State.get()));
+      }
+    } catch (e) {
+      /* URL sync is cosmetic; never break a render for it */
+    }
   }
 
   // Expose the live animation time so the export/thumbnail path can render

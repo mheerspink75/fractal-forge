@@ -508,6 +508,61 @@ async function runTarget(name, url, evidenceBase) {
       'seed ' + seedCtrlBefore + ' \u2192 ' + seedCtrlAfter
     );
 
+    // ---------- Share URL: a world is linkable; junk falls back safely ----------
+    console.log('\n-- Share URL: linkable worlds + safe fallback --');
+    await page.goto(url + '?fractal=sierpinski&seed=424242&time=0&iterations=128', {
+      waitUntil: 'load'
+    });
+    await page.waitForTimeout(900); // first frames settle (sierpinski is light)
+    const restoredState = await page.evaluate(() => {
+      const s = State.get();
+      return { mode: s.mode, seed: s.seed, anim: s.anim, iterations: s.iterations };
+    });
+    ok(
+      'Share URL: valid link restores mode + seed + time + iterations',
+      restoredState.mode === 'sierpinski' &&
+        restoredState.seed === 424242 &&
+        restoredState.anim === 0 &&
+        restoredState.iterations === 128,
+      JSON.stringify(restoredState)
+    );
+    const sharedFrame = await capture(page, evidenceDir, 'share-url-valid');
+    ok(
+      'Share URL: shared world renders a valid frame',
+      isValidFrame(decode(sharedFrame)),
+      JSON.stringify(frameStats(decode(sharedFrame)))
+    );
+
+    await page.goto(url + '?fractal=bogus&seed=abc&time=zzz', { waitUntil: 'load' });
+    await page.waitForTimeout(900);
+    const junkState = await page.evaluate(() => ({
+      mode: State.get().mode,
+      seed: State.get().seed
+    }));
+    ok(
+      'Share URL: junk link falls back to defaults (no NaN, no crash)',
+      junkState.mode === 'mandelbrot' && junkState.seed === 12345,
+      JSON.stringify(junkState)
+    );
+    const junkFrame = await capture(page, evidenceDir, 'share-url-junk');
+    ok(
+      'Share URL: junk link still renders a valid default frame',
+      isValidFrame(decode(junkFrame)),
+      JSON.stringify(frameStats(decode(junkFrame)))
+    );
+
+    const randSeed = await page.evaluate(() => {
+      App.randomize();
+      return State.get().seed;
+    });
+    await page.waitForTimeout(200);
+    const urlAfter = await page.evaluate(() => location.search);
+    ok(
+      'Share URL: URL tracks state changes (replaceState)',
+      urlAfter.indexOf('fractal=') >= 0 && urlAfter.indexOf('seed=' + randSeed) >= 0,
+      urlAfter
+    );
+
     // Any real JS error raised during the run is itself a failure.
     const realErrors = errors.filter((e) => !/favicon/i.test(e));
     ok(
