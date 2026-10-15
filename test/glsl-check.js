@@ -1,11 +1,10 @@
 /* GLSL sanity check: balanced braces/parens, and every uniform referenced
    in a fragment shader is declared in it.
    Run with: node test/glsl-check.js  (or: npm test) */
-const fs = require('fs');
-const path = require('path');
 const vm = require('vm');
+const { loadAppSource } = require('./load-app-source.js');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'script.js'), 'utf8');
+const src = loadAppSource('script.js');
 
 // Minimal sandbox to load the Shaders module.
 function makeEl(id) {

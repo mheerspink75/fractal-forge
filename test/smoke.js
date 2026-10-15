@@ -1,11 +1,10 @@
 /* Smoke test: load script.js in a mocked browser environment and verify
    every module IIFE executes and exposes its expected API.
    Run with: node test/smoke.js  (or: npm test) */
-const fs = require('fs');
-const path = require('path');
 const vm = require('vm');
+const { loadAppSource } = require('./load-app-source.js');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'script.js'), 'utf8');
+const src = loadAppSource('script.js');
 
 // ---- Minimal browser mocks (enough for module *definition*, not rendering) ----
 function makeEl(id) {

@@ -1,10 +1,9 @@
 /* Functional test: exercise the pure-JS logic (no WebGL/DOM needed).
    Run with: node test/functional.js  (or: npm test) */
-const fs = require('fs');
-const path = require('path');
 const vm = require('vm');
+const { loadAppSource } = require('./load-app-source.js');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'script.js'), 'utf8');
+const src = loadAppSource('script.js');
 
 function makeEl(id) {
   return {
