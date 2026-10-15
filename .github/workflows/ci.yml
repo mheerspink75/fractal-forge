@@ -21,6 +21,32 @@ jobs:
         with:
           node-version: 24
 
-      # Zero-dependency project: no `npm install` / `npm ci` required.
+      # Dev dependencies (playwright, pngjs) are installed for the test jobs.
+      - name: Install dependencies
+        run: npm ci
+
       - name: Run tests
         run: npm test
+
+  browser:
+    name: Browser checks (Playwright, local target)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium (headless WebGL via SwiftShader)
+        run: npx playwright install --with-deps chromium
+
+      # Local target only: SKIP_LIVE=1 serves the PR's own files instead of the
+      # production site, so the change under review is what gets verified.
+      - name: Run browser checks (local target)
+        run: SKIP_LIVE=1 npm run test:browser
