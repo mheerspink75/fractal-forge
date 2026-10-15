@@ -28,6 +28,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Lint
+        run: npm run lint
+
   browser:
     name: Browser checks (Playwright, local target)
     runs-on: ubuntu-latest

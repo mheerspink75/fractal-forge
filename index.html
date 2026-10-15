@@ -1,339 +1,456 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="FRACTAL FORGE — an immersive, infinitely generative fractal art installation. Explore, customize, and export gallery-quality digital art in your browser." />
-  <meta name="theme-color" content="#05060a" />
-  <meta property="og:title" content="FRACTAL FORGE" />
-  <meta property="og:description" content="An immersive generative fractal art installation. Explore infinite worlds, customize the render, and export gallery-quality art." />
-  <meta property="og:type" content="website" />
-  <title>FRACTAL FORGE — Generative Fractal Art</title>
-  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <!-- Background ambient particle field (2D canvas, behind the WebGL canvas) -->
-  <canvas id="ambient-canvas" aria-hidden="true"></canvas>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="FRACTAL FORGE — an immersive, infinitely generative fractal art installation. Explore, customize, and export gallery-quality digital art in your browser."
+    />
+    <meta name="theme-color" content="#05060a" />
+    <meta property="og:title" content="FRACTAL FORGE" />
+    <meta
+      property="og:description"
+      content="An immersive generative fractal art installation. Explore infinite worlds, customize the render, and export gallery-quality art."
+    />
+    <meta property="og:type" content="website" />
+    <title>FRACTAL FORGE — Generative Fractal Art</title>
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Background ambient particle field (2D canvas, behind the WebGL canvas) -->
+    <canvas id="ambient-canvas" aria-hidden="true"></canvas>
 
-  <!-- Main WebGL render surface -->
-  <canvas id="gl-canvas" role="img" aria-label="Interactive mathematical art renderer. Use the Fractal Worlds and Parameters panels to change the mode, palette, and effects; scroll or pinch to zoom and drag to pan."></canvas>
+    <!-- Main WebGL render surface -->
+    <canvas
+      id="gl-canvas"
+      role="img"
+      aria-label="Interactive mathematical art renderer. Use the Fractal Worlds and Parameters panels to change the mode, palette, and effects; scroll or pinch to zoom and drag to pan."
+    ></canvas>
 
-  <!-- Subtle vignette / grain overlay for cinematic depth -->
-  <div class="fx-overlay" aria-hidden="true"></div>
+    <!-- Subtle vignette / grain overlay for cinematic depth -->
+    <div class="fx-overlay" aria-hidden="true"></div>
 
-  <!-- ===================== TOP BAR ===================== -->
-  <header class="topbar" role="banner">
-    <div class="brand">
-      <span class="brand-mark" aria-hidden="true">
-        <svg viewBox="0 0 32 32" width="26" height="26" fill="none">
-          <circle cx="16" cy="16" r="13" stroke="url(#g1)" stroke-width="1.5" />
-          <circle cx="16" cy="16" r="8" stroke="url(#g1)" stroke-width="1.2" opacity="0.7" />
-          <circle cx="16" cy="16" r="3.5" fill="url(#g1)" />
-          <defs>
-            <linearGradient id="g1" x1="0" y1="0" x2="32" y2="32">
-              <stop offset="0" stop-color="#7c5cff" />
-              <stop offset="0.5" stop-color="#22d3ee" />
-              <stop offset="1" stop-color="#f472b6" />
-            </linearGradient>
-          </defs>
-        </svg>
-      </span>
-      <div class="brand-text">
-        <h1>FRACTAL FORGE</h1>
-        <p>Generative Art Installation</p>
-      </div>
-    </div>
-
-    <nav class="topbar-actions" aria-label="Primary actions">
-      <button class="btn btn-ghost" id="btn-randomize" title="Randomize (R)">
-        <span class="ico" aria-hidden="true">✦</span><span class="lbl">Randomize</span>
-      </button>
-      <button class="btn btn-ghost" id="btn-newworld" title="Generate a new world (N)">
-        <span class="ico" aria-hidden="true">◈</span><span class="lbl">New World</span>
-      </button>
-      <button class="btn btn-ghost" id="btn-share" title="Copy share code (S)">
-        <span class="ico" aria-hidden="true">⤴</span><span class="lbl">Share</span>
-      </button>
-      <button class="btn btn-ghost" id="btn-export" title="Export artwork (E)">
-        <span class="ico" aria-hidden="true">⤓</span><span class="lbl">Export</span>
-      </button>
-      <button class="btn btn-ghost" id="btn-gallery" title="Gallery (G)">
-        <span class="ico" aria-hidden="true">▤</span><span class="lbl">Gallery</span>
-      </button>
-      <button class="btn btn-primary" id="btn-save" title="Save artwork">
-        <span class="ico" aria-hidden="true">✚</span><span class="lbl">Save</span>
-      </button>
-      <button class="btn btn-ghost" id="btn-audio" title="Audio reactive (A)" aria-pressed="false">
-        <span class="ico" aria-hidden="true">♪</span><span class="lbl">Audio</span>
-      </button>
-      <button class="btn btn-ghost" id="btn-settings" title="Settings &amp; accessibility">
-        <span class="ico" aria-hidden="true">⚙</span><span class="lbl">Settings</span>
-      </button>
-    </nav>
-  </header>
-
-      <!-- Mobile drawer backdrop (shown when a side panel is open on small screens) -->
-      <div class="panel-backdrop" id="panel-backdrop" aria-hidden="true"></div>
-
-      <!-- ===================== LEFT PANEL: MODES ===================== -->
-  <aside class="panel panel-left" id="panel-modes" aria-label="Fractal modes">
-    <div class="panel-head">
-      <h2>Fractal Worlds</h2>
-      <button class="panel-collapse" id="collapse-modes" aria-label="Collapse panel">‹</button>
-    </div>
-    <div class="panel-body">
-      <div class="mode-group">
-        <p class="group-label">Classics</p>
-        <div class="mode-list" id="mode-list-classic" role="group" aria-label="Classic fractals"></div>
-      </div>
-      <div class="mode-group">
-        <p class="group-label">Experimental</p>
-        <div class="mode-list" id="mode-list-experimental" role="group" aria-label="Experimental fractals"></div>
-      </div>
-      <div class="mode-group">
-        <p class="group-label">Structural</p>
-        <div class="mode-list" id="mode-list-structural" role="group" aria-label="Structural fractals"></div>
-      </div>
-      <div class="mode-group">
-        <p class="group-label">3D</p>
-        <div class="mode-list" id="mode-list-3d" role="group" aria-label="3D fractals"></div>
-      </div>
-    </div>
-  </aside>
-
-  <!-- ===================== RIGHT PANEL: PARAMETERS ===================== -->
-  <aside class="panel panel-right" id="panel-params" aria-label="Render parameters">
-    <div class="panel-head">
-      <h2>Parameters</h2>
-      <button class="panel-collapse" id="collapse-params" aria-label="Collapse panel">›</button>
-    </div>
-    <div class="panel-body">
-      <!-- Palette -->
-      <section class="ctrl-section">
-        <div class="ctrl-head">
-          <h3>Palette</h3>
-          <button class="mini-btn" id="btn-cycle" title="Toggle animated palette cycling">Cycle</button>
+    <!-- ===================== TOP BAR ===================== -->
+    <header class="topbar" role="banner">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="26" height="26" fill="none">
+            <circle cx="16" cy="16" r="13" stroke="url(#g1)" stroke-width="1.5" />
+            <circle cx="16" cy="16" r="8" stroke="url(#g1)" stroke-width="1.2" opacity="0.7" />
+            <circle cx="16" cy="16" r="3.5" fill="url(#g1)" />
+            <defs>
+              <linearGradient id="g1" x1="0" y1="0" x2="32" y2="32">
+                <stop offset="0" stop-color="#7c5cff" />
+                <stop offset="0.5" stop-color="#22d3ee" />
+                <stop offset="1" stop-color="#f472b6" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </span>
+        <div class="brand-text">
+          <h1>FRACTAL FORGE</h1>
+          <p>Generative Art Installation</p>
         </div>
-        <div class="palette-grid" id="palette-grid" role="group" aria-label="Color palette"></div>
-        <div class="gradient-editor" id="gradient-editor">
-          <div class="gradient-bar" id="gradient-bar" aria-hidden="true"></div>
-          <div class="grad-sliders">
-            <label>Phase <input type="range" id="grad-phase" min="0" max="1000" value="0" /></label>
-            <label>Speed <input type="range" id="grad-speed" min="0" max="100" value="20" /></label>
-            <label>Contrast <input type="range" id="grad-contrast" min="0" max="200" value="100" /></label>
+      </div>
+
+      <nav class="topbar-actions" aria-label="Primary actions">
+        <button class="btn btn-ghost" id="btn-randomize" title="Randomize (R)">
+          <span class="ico" aria-hidden="true">✦</span><span class="lbl">Randomize</span>
+        </button>
+        <button class="btn btn-ghost" id="btn-newworld" title="Generate a new world (N)">
+          <span class="ico" aria-hidden="true">◈</span><span class="lbl">New World</span>
+        </button>
+        <button class="btn btn-ghost" id="btn-share" title="Copy share code (S)">
+          <span class="ico" aria-hidden="true">⤴</span><span class="lbl">Share</span>
+        </button>
+        <button class="btn btn-ghost" id="btn-export" title="Export artwork (E)">
+          <span class="ico" aria-hidden="true">⤓</span><span class="lbl">Export</span>
+        </button>
+        <button class="btn btn-ghost" id="btn-gallery" title="Gallery (G)">
+          <span class="ico" aria-hidden="true">▤</span><span class="lbl">Gallery</span>
+        </button>
+        <button class="btn btn-primary" id="btn-save" title="Save artwork">
+          <span class="ico" aria-hidden="true">✚</span><span class="lbl">Save</span>
+        </button>
+        <button
+          class="btn btn-ghost"
+          id="btn-audio"
+          title="Audio reactive (A)"
+          aria-pressed="false"
+        >
+          <span class="ico" aria-hidden="true">♪</span><span class="lbl">Audio</span>
+        </button>
+        <button class="btn btn-ghost" id="btn-settings" title="Settings &amp; accessibility">
+          <span class="ico" aria-hidden="true">⚙</span><span class="lbl">Settings</span>
+        </button>
+      </nav>
+    </header>
+
+    <!-- Mobile drawer backdrop (shown when a side panel is open on small screens) -->
+    <div class="panel-backdrop" id="panel-backdrop" aria-hidden="true"></div>
+
+    <!-- ===================== LEFT PANEL: MODES ===================== -->
+    <aside class="panel panel-left" id="panel-modes" aria-label="Fractal modes">
+      <div class="panel-head">
+        <h2>Fractal Worlds</h2>
+        <button class="panel-collapse" id="collapse-modes" aria-label="Collapse panel">‹</button>
+      </div>
+      <div class="panel-body">
+        <div class="mode-group">
+          <p class="group-label">Classics</p>
+          <div
+            class="mode-list"
+            id="mode-list-classic"
+            role="group"
+            aria-label="Classic fractals"
+          ></div>
+        </div>
+        <div class="mode-group">
+          <p class="group-label">Experimental</p>
+          <div
+            class="mode-list"
+            id="mode-list-experimental"
+            role="group"
+            aria-label="Experimental fractals"
+          ></div>
+        </div>
+        <div class="mode-group">
+          <p class="group-label">Structural</p>
+          <div
+            class="mode-list"
+            id="mode-list-structural"
+            role="group"
+            aria-label="Structural fractals"
+          ></div>
+        </div>
+        <div class="mode-group">
+          <p class="group-label">3D</p>
+          <div class="mode-list" id="mode-list-3d" role="group" aria-label="3D fractals"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===================== RIGHT PANEL: PARAMETERS ===================== -->
+    <aside class="panel panel-right" id="panel-params" aria-label="Render parameters">
+      <div class="panel-head">
+        <h2>Parameters</h2>
+        <button class="panel-collapse" id="collapse-params" aria-label="Collapse panel">›</button>
+      </div>
+      <div class="panel-body">
+        <!-- Palette -->
+        <section class="ctrl-section">
+          <div class="ctrl-head">
+            <h3>Palette</h3>
+            <button class="mini-btn" id="btn-cycle" title="Toggle animated palette cycling">
+              Cycle
+            </button>
+          </div>
+          <div class="palette-grid" id="palette-grid" role="group" aria-label="Color palette"></div>
+          <div class="gradient-editor" id="gradient-editor">
+            <div class="gradient-bar" id="gradient-bar" aria-hidden="true"></div>
+            <div class="grad-sliders">
+              <label
+                >Phase <input type="range" id="grad-phase" min="0" max="1000" value="0"
+              /></label>
+              <label
+                >Speed <input type="range" id="grad-speed" min="0" max="100" value="20"
+              /></label>
+              <label
+                >Contrast <input type="range" id="grad-contrast" min="0" max="200" value="100"
+              /></label>
+            </div>
+          </div>
+        </section>
+
+        <!-- Render -->
+        <section class="ctrl-section">
+          <div class="ctrl-head"><h3>Render</h3></div>
+          <label class="slider-row"
+            >Iterations <span class="val" id="val-iterations">256</span>
+            <input type="range" id="ctl-iterations" min="16" max="4096" step="16" value="256" />
+          </label>
+          <label class="slider-row"
+            >Detail <span class="val" id="val-detail">1.0</span>
+            <input type="range" id="ctl-detail" min="0" max="100" value="50" />
+          </label>
+          <label class="slider-row"
+            >Animation <span class="val" id="val-anim">50</span>
+            <input type="range" id="ctl-anim" min="0" max="100" value="50" />
+          </label>
+          <label class="slider-row"
+            >Zoom <span class="val" id="val-zoom">1.00</span>
+            <input type="range" id="ctl-zoom" min="0" max="100" value="20" />
+          </label>
+        </section>
+
+        <!-- Effects -->
+        <section class="ctrl-section">
+          <div class="ctrl-head"><h3>Effects</h3></div>
+          <label class="slider-row"
+            >Bloom <span class="val" id="val-bloom">60</span>
+            <input type="range" id="ctl-bloom" min="0" max="100" value="60" />
+          </label>
+          <label class="slider-row"
+            >Trails <span class="val" id="val-trails">0</span>
+            <input type="range" id="ctl-trails" min="0" max="100" value="0" />
+          </label>
+          <label class="slider-row"
+            >Aberration <span class="val" id="val-aberration">20</span>
+            <input type="range" id="ctl-aberration" min="0" max="100" value="20" />
+          </label>
+          <label class="slider-row"
+            >Vignette <span class="val" id="val-vignette">40</span>
+            <input type="range" id="ctl-vignette" min="0" max="100" value="40" />
+          </label>
+          <label class="slider-row"
+            >Fog <span class="val" id="val-fog">30</span>
+            <input type="range" id="ctl-fog" min="0" max="100" value="30" />
+          </label>
+        </section>
+
+        <!-- Mode-specific (populated dynamically) -->
+        <section class="ctrl-section" id="mode-specific" hidden>
+          <div class="ctrl-head"><h3 id="mode-specific-title">Mode</h3></div>
+          <div id="mode-specific-body"></div>
+        </section>
+      </div>
+    </aside>
+
+    <!-- ===================== STATUS BAR ===================== -->
+    <footer class="statusbar" role="contentinfo">
+      <div class="status-left">
+        <span class="status-chip" id="status-mode">Mandelbrot</span>
+        <span class="status-chip" id="status-seed">seed 00000000</span>
+      </div>
+      <div class="status-center" id="status-hint">
+        Scroll to zoom · Drag to pan · Double-click to focus
+      </div>
+      <div class="status-right">
+        <span class="fps" id="status-fps">60 fps</span>
+        <span class="zoom" id="status-zoom">1.00×</span>
+      </div>
+    </footer>
+
+    <!-- ===================== TOASTS ===================== -->
+    <div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="false"></div>
+
+    <!-- ===================== MODALS ===================== -->
+    <div class="modal-backdrop" id="modal-gallery" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="gallery-title">
+        <div class="modal-head">
+          <h2 id="gallery-title">Gallery</h2>
+          <div class="modal-actions">
+            <button class="btn btn-ghost" id="btn-import-code">Import code</button>
+            <button class="modal-close" data-close="modal-gallery" aria-label="Close">✕</button>
           </div>
         </div>
-      </section>
-
-      <!-- Render -->
-      <section class="ctrl-section">
-        <div class="ctrl-head"><h3>Render</h3></div>
-        <label class="slider-row">Iterations <span class="val" id="val-iterations">256</span>
-          <input type="range" id="ctl-iterations" min="16" max="4096" step="16" value="256" />
-        </label>
-        <label class="slider-row">Detail <span class="val" id="val-detail">1.0</span>
-          <input type="range" id="ctl-detail" min="0" max="100" value="50" />
-        </label>
-        <label class="slider-row">Animation <span class="val" id="val-anim">50</span>
-          <input type="range" id="ctl-anim" min="0" max="100" value="50" />
-        </label>
-        <label class="slider-row">Zoom <span class="val" id="val-zoom">1.00</span>
-          <input type="range" id="ctl-zoom" min="0" max="100" value="20" />
-        </label>
-      </section>
-
-      <!-- Effects -->
-      <section class="ctrl-section">
-        <div class="ctrl-head"><h3>Effects</h3></div>
-        <label class="slider-row">Bloom <span class="val" id="val-bloom">60</span>
-          <input type="range" id="ctl-bloom" min="0" max="100" value="60" />
-        </label>
-        <label class="slider-row">Trails <span class="val" id="val-trails">0</span>
-          <input type="range" id="ctl-trails" min="0" max="100" value="0" />
-        </label>
-        <label class="slider-row">Aberration <span class="val" id="val-aberration">20</span>
-          <input type="range" id="ctl-aberration" min="0" max="100" value="20" />
-        </label>
-        <label class="slider-row">Vignette <span class="val" id="val-vignette">40</span>
-          <input type="range" id="ctl-vignette" min="0" max="100" value="40" />
-        </label>
-        <label class="slider-row">Fog <span class="val" id="val-fog">30</span>
-          <input type="range" id="ctl-fog" min="0" max="100" value="30" />
-        </label>
-      </section>
-
-      <!-- Mode-specific (populated dynamically) -->
-      <section class="ctrl-section" id="mode-specific" hidden>
-        <div class="ctrl-head"><h3 id="mode-specific-title">Mode</h3></div>
-        <div id="mode-specific-body"></div>
-      </section>
-    </div>
-  </aside>
-
-  <!-- ===================== STATUS BAR ===================== -->
-  <footer class="statusbar" role="contentinfo">
-    <div class="status-left">
-      <span class="status-chip" id="status-mode">Mandelbrot</span>
-      <span class="status-chip" id="status-seed">seed 00000000</span>
-    </div>
-    <div class="status-center" id="status-hint">Scroll to zoom · Drag to pan · Double-click to focus</div>
-    <div class="status-right">
-      <span class="fps" id="status-fps">60 fps</span>
-      <span class="zoom" id="status-zoom">1.00×</span>
-    </div>
-  </footer>
-
-  <!-- ===================== TOASTS ===================== -->
-  <div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="false"></div>
-
-  <!-- ===================== MODALS ===================== -->
-  <div class="modal-backdrop" id="modal-gallery" hidden>
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="gallery-title">
-      <div class="modal-head">
-        <h2 id="gallery-title">Gallery</h2>
-        <div class="modal-actions">
-          <button class="btn btn-ghost" id="btn-import-code">Import code</button>
-          <button class="modal-close" data-close="modal-gallery" aria-label="Close">✕</button>
-        </div>
-      </div>
-      <div class="modal-body">
-        <div class="gallery-grid" id="gallery-grid"></div>
-        <p class="empty-state" id="gallery-empty">No saved artworks yet. Use the <b>Save</b> button to keep a world here.</p>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-backdrop" id="modal-save" hidden>
-    <div class="modal modal-narrow" role="dialog" aria-modal="true" aria-labelledby="save-title">
-      <div class="modal-head">
-        <h2 id="save-title">Save artwork</h2>
-        <button class="modal-close" data-close="modal-save" aria-label="Close">✕</button>
-      </div>
-      <div class="modal-body">
-        <label class="field" for="save-name">
-          <span class="field-label">Name</span>
-          <input type="text" id="save-name" class="text-input" maxlength="60" autocomplete="off" />
-        </label>
-        <p class="modal-sub">Saved locally in your browser with a thumbnail and the full parameter set.</p>
-      </div>
-      <div class="modal-actions-row">
-        <button class="btn btn-ghost" id="btn-save-cancel">Cancel</button>
-        <button class="btn btn-primary" id="btn-save-confirm">Save</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-backdrop" id="modal-confirm" hidden>
-    <div class="modal modal-narrow" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-desc">
-      <div class="modal-head">
-        <h2 id="confirm-title">Delete artwork?</h2>
-        <button class="modal-close" data-close="modal-confirm" aria-label="Close">✕</button>
-      </div>
-      <div class="modal-body">
-        <p id="confirm-desc">This permanently removes the artwork from your local gallery.</p>
-      </div>
-      <div class="modal-actions-row">
-        <button class="btn btn-ghost" id="btn-confirm-cancel">Cancel</button>
-        <button class="btn btn-danger" id="btn-confirm-ok">Delete</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-backdrop" id="modal-export" hidden>
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="export-title">
-      <div class="modal-head">
-        <h2 id="export-title">Export Artwork</h2>
-        <button class="modal-close" data-close="modal-export" aria-label="Close">✕</button>
-      </div>
-      <div class="modal-body">
-        <p class="modal-sub">Render the current world at a fixed resolution and download as PNG.</p>
-        <div class="export-grid" id="export-grid">
-          <button class="export-card" data-res="1920x1080"><span>1920 × 1080</span><small>FHD Wallpaper</small></button>
-          <button class="export-card" data-res="2560x1440"><span>2560 × 1440</span><small>QHD Wallpaper</small></button>
-          <button class="export-card" data-res="3840x2160"><span>3840 × 2160</span><small>4K Wallpaper</small></button>
-          <button class="export-card" data-res="current"><span>Current</span><small>Screen size</small></button>
-        </div>
-        <div class="export-progress" id="export-progress" hidden>
-          <div class="progress-track"><div class="progress-fill" id="export-fill"></div></div>
-          <p id="export-status">Rendering…</p>
+        <div class="modal-body">
+          <div class="gallery-grid" id="gallery-grid"></div>
+          <p class="empty-state" id="gallery-empty">
+            No saved artworks yet. Use the <b>Save</b> button to keep a world here.
+          </p>
         </div>
       </div>
     </div>
-  </div>
 
-  <div class="modal-backdrop" id="modal-settings" hidden>
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-      <div class="modal-head">
-        <h2 id="settings-title">Settings</h2>
-        <button class="modal-close" data-close="modal-settings" aria-label="Close">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="setting-row">
-          <div><h3>Reduced motion</h3><p>Disable trails, particles and heavy animation.</p></div>
-          <label class="switch"><input type="checkbox" id="set-reduced-motion" /><span></span></label>
+    <div class="modal-backdrop" id="modal-save" hidden>
+      <div class="modal modal-narrow" role="dialog" aria-modal="true" aria-labelledby="save-title">
+        <div class="modal-head">
+          <h2 id="save-title">Save artwork</h2>
+          <button class="modal-close" data-close="modal-save" aria-label="Close">✕</button>
         </div>
-        <div class="setting-row">
-          <div><h3>High contrast</h3><p>Boost contrast and saturation for clarity.</p></div>
-          <label class="switch"><input type="checkbox" id="set-high-contrast" /><span></span></label>
+        <div class="modal-body">
+          <label class="field" for="save-name">
+            <span class="field-label">Name</span>
+            <input
+              type="text"
+              id="save-name"
+              class="text-input"
+              maxlength="60"
+              autocomplete="off"
+            />
+          </label>
+          <p class="modal-sub">
+            Saved locally in your browser with a thumbnail and the full parameter set.
+          </p>
         </div>
-        <div class="setting-row">
-          <div><h3>Adaptive quality</h3><p>Automatically scale resolution to hold 60 FPS.</p></div>
-          <label class="switch"><input type="checkbox" id="set-adaptive" checked /><span></span></label>
-        </div>
-        <div class="setting-row">
-          <div><h3>Keyboard shortcuts</h3><p>Enable single-key controls.</p></div>
-          <label class="switch"><input type="checkbox" id="set-keyboard" checked /><span></span></label>
-        </div>
-        <div class="setting-row">
-          <div><h3>Reset</h3><p>Clear saved gallery and settings.</p></div>
-          <button class="btn btn-danger" id="btn-reset">Reset all</button>
+        <div class="modal-actions-row">
+          <button class="btn btn-ghost" id="btn-save-cancel">Cancel</button>
+          <button class="btn btn-primary" id="btn-save-confirm">Save</button>
         </div>
       </div>
     </div>
-  </div>
 
-  <div class="modal-backdrop" id="modal-help" hidden>
-    <div class="modal modal-narrow" role="dialog" aria-modal="true" aria-labelledby="help-title">
-      <div class="modal-head">
-        <h2 id="help-title">Controls</h2>
-        <button class="modal-close" data-close="modal-help" aria-label="Close">✕</button>
-      </div>
-      <div class="modal-body">
-        <dl class="help-grid">
-          <dt>Scroll / Pinch</dt><dd>Zoom in &amp; out</dd>
-          <dt>Drag / One-finger</dt><dd>Pan the viewport</dd>
-          <dt>Double-click</dt><dd>Focus &amp; zoom to point</dd>
-          <dt>Space</dt><dd>Pause / resume animation</dd>
-          <dt>R</dt><dd>Randomize parameters</dd>
-          <dt>N</dt><dd>Generate a new world</dd>
-          <dt>S</dt><dd>Copy share code</dd>
-          <dt>E</dt><dd>Export artwork</dd>
-          <dt>G</dt><dd>Open gallery</dd>
-          <dt>A</dt><dd>Toggle audio reactive</dd>
-          <dt>← ↑ → ↓</dt><dd>Pan</dd>
-          <dt>+ / −</dt><dd>Zoom</dd>
-          <dt>1–9</dt><dd>Switch palette</dd>
-        </dl>
+    <div class="modal-backdrop" id="modal-confirm" hidden>
+      <div
+        class="modal modal-narrow"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-title"
+        aria-describedby="confirm-desc"
+      >
+        <div class="modal-head">
+          <h2 id="confirm-title">Delete artwork?</h2>
+          <button class="modal-close" data-close="modal-confirm" aria-label="Close">✕</button>
+        </div>
+        <div class="modal-body">
+          <p id="confirm-desc">This permanently removes the artwork from your local gallery.</p>
+        </div>
+        <div class="modal-actions-row">
+          <button class="btn btn-ghost" id="btn-confirm-cancel">Cancel</button>
+          <button class="btn btn-danger" id="btn-confirm-ok">Delete</button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- Onboarding hint -->
-  <div class="onboarding" id="onboarding">
-    <div class="onboarding-card">
-      <h3>Welcome to FRACTAL FORGE</h3>
-      <p>Explore infinitely generated fractal worlds. Scroll to zoom, drag to pan, and hit <b>Randomize</b> to forge a new composition.</p>
-      <div class="onboarding-actions">
-        <button class="btn btn-primary" id="onboard-start">Start exploring</button>
-        <button class="btn btn-ghost" id="onboard-help">View controls</button>
+    <div class="modal-backdrop" id="modal-export" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="export-title">
+        <div class="modal-head">
+          <h2 id="export-title">Export Artwork</h2>
+          <button class="modal-close" data-close="modal-export" aria-label="Close">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-sub">
+            Render the current world at a fixed resolution and download as PNG.
+          </p>
+          <div class="export-grid" id="export-grid">
+            <button class="export-card" data-res="1920x1080">
+              <span>1920 × 1080</span><small>FHD Wallpaper</small>
+            </button>
+            <button class="export-card" data-res="2560x1440">
+              <span>2560 × 1440</span><small>QHD Wallpaper</small>
+            </button>
+            <button class="export-card" data-res="3840x2160">
+              <span>3840 × 2160</span><small>4K Wallpaper</small>
+            </button>
+            <button class="export-card" data-res="current">
+              <span>Current</span><small>Screen size</small>
+            </button>
+          </div>
+          <div class="export-progress" id="export-progress" hidden>
+            <div class="progress-track"><div class="progress-fill" id="export-fill"></div></div>
+            <p id="export-status">Rendering…</p>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <script src="script.js"></script>
-</body>
+    <div class="modal-backdrop" id="modal-settings" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="modal-head">
+          <h2 id="settings-title">Settings</h2>
+          <button class="modal-close" data-close="modal-settings" aria-label="Close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="setting-row">
+            <div>
+              <h3>Reduced motion</h3>
+              <p>Disable trails, particles and heavy animation.</p>
+            </div>
+            <label class="switch"
+              ><input type="checkbox" id="set-reduced-motion" /><span></span
+            ></label>
+          </div>
+          <div class="setting-row">
+            <div>
+              <h3>High contrast</h3>
+              <p>Boost contrast and saturation for clarity.</p>
+            </div>
+            <label class="switch"
+              ><input type="checkbox" id="set-high-contrast" /><span></span
+            ></label>
+          </div>
+          <div class="setting-row">
+            <div>
+              <h3>Adaptive quality</h3>
+              <p>Automatically scale resolution to hold 60 FPS.</p>
+            </div>
+            <label class="switch"
+              ><input type="checkbox" id="set-adaptive" checked /><span></span
+            ></label>
+          </div>
+          <div class="setting-row">
+            <div>
+              <h3>Keyboard shortcuts</h3>
+              <p>Enable single-key controls.</p>
+            </div>
+            <label class="switch"
+              ><input type="checkbox" id="set-keyboard" checked /><span></span
+            ></label>
+          </div>
+          <div class="setting-row">
+            <div>
+              <h3>Reset</h3>
+              <p>Clear saved gallery and settings.</p>
+            </div>
+            <button class="btn btn-danger" id="btn-reset">Reset all</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="modal-help" hidden>
+      <div class="modal modal-narrow" role="dialog" aria-modal="true" aria-labelledby="help-title">
+        <div class="modal-head">
+          <h2 id="help-title">Controls</h2>
+          <button class="modal-close" data-close="modal-help" aria-label="Close">✕</button>
+        </div>
+        <div class="modal-body">
+          <dl class="help-grid">
+            <dt>Scroll / Pinch</dt>
+            <dd>Zoom in &amp; out</dd>
+            <dt>Drag / One-finger</dt>
+            <dd>Pan the viewport</dd>
+            <dt>Double-click</dt>
+            <dd>Focus &amp; zoom to point</dd>
+            <dt>Space</dt>
+            <dd>Pause / resume animation</dd>
+            <dt>R</dt>
+            <dd>Randomize parameters</dd>
+            <dt>N</dt>
+            <dd>Generate a new world</dd>
+            <dt>S</dt>
+            <dd>Copy share code</dd>
+            <dt>E</dt>
+            <dd>Export artwork</dd>
+            <dt>G</dt>
+            <dd>Open gallery</dd>
+            <dt>A</dt>
+            <dd>Toggle audio reactive</dd>
+            <dt>← ↑ → ↓</dt>
+            <dd>Pan</dd>
+            <dt>+ / −</dt>
+            <dd>Zoom</dd>
+            <dt>1–9</dt>
+            <dd>Switch palette</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <!-- Onboarding hint -->
+    <div class="onboarding" id="onboarding">
+      <div class="onboarding-card">
+        <h3>Welcome to FRACTAL FORGE</h3>
+        <p>
+          Explore infinitely generated fractal worlds. Scroll to zoom, drag to pan, and hit
+          <b>Randomize</b> to forge a new composition.
+        </p>
+        <div class="onboarding-actions">
+          <button class="btn btn-primary" id="onboard-start">Start exploring</button>
+          <button class="btn btn-ghost" id="onboard-help">View controls</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
 </html>

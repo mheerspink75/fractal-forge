@@ -35,7 +35,8 @@ const Util = (() => {
   function mulberry32(seed) {
     let a = seed >>> 0;
     return function () {
-      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      a |= 0;
+      a = (a + 0x6d2b79f5) | 0;
       let t = Math.imul(a ^ (a >>> 15), 1 | a);
       t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
@@ -45,7 +46,10 @@ const Util = (() => {
   // 4-state PRNG (sfc32) — longer period, good for procedural variety.
   function sfc32(a, b, c, d) {
     return function () {
-      a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;
+      a >>>= 0;
+      b >>>= 0;
+      c >>>= 0;
+      d >>>= 0;
       let t = (a + b) | 0;
       a = b ^ (b >>> 9);
       b = (c + (c << 3)) | 0;
@@ -89,10 +93,12 @@ const Util = (() => {
 
   // Compact number array -> base36 string (for share codes).
   function packNumbers(nums) {
-    return nums.map((n) => {
-      const r = Math.round(n * 1e5) / 1e5;
-      return String(r).replace('-', '~');
-    }).join('_');
+    return nums
+      .map((n) => {
+        const r = Math.round(n * 1e5) / 1e5;
+        return String(r).replace('-', '~');
+      })
+      .join('_');
   }
   function unpackNumbers(str) {
     return str.split('_').map((s) => parseFloat(s.replace('~', '-')));
@@ -101,9 +107,19 @@ const Util = (() => {
   const now = () => performance.now();
 
   return {
-    mulberry32, sfc32, clamp, lerp, smoothstep,
-    randInt, randRange, pick,
-    b64urlEncode, b64urlDecode, packNumbers, unpackNumbers, now,
+    mulberry32,
+    sfc32,
+    clamp,
+    lerp,
+    smoothstep,
+    randInt,
+    randRange,
+    pick,
+    b64urlEncode,
+    b64urlDecode,
+    packNumbers,
+    unpackNumbers,
+    now
   };
 })();
 
@@ -132,7 +148,7 @@ const GL = (() => {
       alpha: false,
       premultipliedAlpha: false,
       preserveDrawingBuffer: false,
-      powerPreference: 'high-performance',
+      powerPreference: 'high-performance'
     };
     gl = canvasEl.getContext('webgl', attrs) || canvasEl.getContext('experimental-webgl', attrs);
     if (!gl) throw new Error('WebGL is not supported in this browser.');
@@ -166,7 +182,9 @@ const GL = (() => {
       const log = gl.getShaderInfoLog(shader);
       gl.deleteShader(shader);
       // Keep the full source + diagnostics in the console; surface a concise message.
-      console.error('[FRACTAL FORGE] Shader compile failed (' + name + '):\n' + log + '\n\n' + source);
+      console.error(
+        '[FRACTAL FORGE] Shader compile failed (' + name + '):\n' + log + '\n\n' + source
+      );
       const first = log ? log.split('\n')[0].trim() : 'unknown error';
       throw new Error('Shader compile failed: ' + name + ' — ' + first);
     }
@@ -177,7 +195,9 @@ const GL = (() => {
   // `name` is used in diagnostics so failures are attributable to a specific pass.
   function createProgram(vsSource, fsSource, name) {
     const label = name || 'program';
-    let vs = null, fs = null, program = null;
+    let vs = null,
+      fs = null,
+      program = null;
     try {
       vs = compile(gl.VERTEX_SHADER, vsSource, label + ':vertex');
       fs = compile(gl.FRAGMENT_SHADER, fsSource, label + ':fragment');
@@ -214,7 +234,11 @@ const GL = (() => {
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
     const internal = float ? gl.HALF_FLOAT : gl.RGBA;
-    const type = float ? (gl.HALF_FLOAT_OES !== undefined ? gl.HALF_FLOAT_OES : gl.UNSIGNED_BYTE) : gl.UNSIGNED_BYTE;
+    const type = float
+      ? gl.HALF_FLOAT_OES !== undefined
+        ? gl.HALF_FLOAT_OES
+        : gl.UNSIGNED_BYTE
+      : gl.UNSIGNED_BYTE;
     gl.texImage2D(gl.TEXTURE_2D, 0, internal, width, height, 0, gl.RGBA, type, null);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -231,8 +255,23 @@ const GL = (() => {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.deleteTexture(texture);
       gl.deleteFramebuffer(fbo);
-      console.error('[FRACTAL FORGE] Incomplete framebuffer (' + width + 'x' + height + '): 0x' + status.toString(16));
-      throw new Error('Failed to create a complete ' + width + 'x' + height + ' framebuffer (status 0x' + status.toString(16) + ').');
+      console.error(
+        '[FRACTAL FORGE] Incomplete framebuffer (' +
+          width +
+          'x' +
+          height +
+          '): 0x' +
+          status.toString(16)
+      );
+      throw new Error(
+        'Failed to create a complete ' +
+          width +
+          'x' +
+          height +
+          ' framebuffer (status 0x' +
+          status.toString(16) +
+          ').'
+      );
     }
 
     gl.viewport(0, 0, width, height);
@@ -307,11 +346,24 @@ const GL = (() => {
   }
 
   return {
-    init, createProgram, createFBO, deleteFBO, render, setUniform, resize, bindTexture,
+    init,
+    createProgram,
+    createFBO,
+    deleteFBO,
+    render,
+    setUniform,
+    resize,
+    bindTexture,
     setContextHandlers,
-    get gl() { return gl; },
-    get canvas() { return canvas; },
-    get contextLost() { return contextLost; },
+    get gl() {
+      return gl;
+    },
+    get canvas() {
+      return canvas;
+    },
+    get contextLost() {
+      return contextLost;
+    }
   };
 })();
 
@@ -401,7 +453,9 @@ const Shaders = (() => {
 
   /* ---------------- Classic fractals ---------------- */
 
-  const MANDELBROT = COMMON + `
+  const MANDELBROT =
+    COMMON +
+    `
     void main() {
       vec2 c = toFractal();
       // Seed-driven view offset (bounded, continuous, deterministic in u_seed).
@@ -422,7 +476,9 @@ const Shaders = (() => {
     }
   `;
 
-  const JULIA = COMMON + `
+  const JULIA =
+    COMMON +
+    `
     uniform float u_julia_phase;
     void main() {
       vec2 p = toFractal();
@@ -444,7 +500,9 @@ const Shaders = (() => {
     }
   `;
 
-  const BURNING_SHIP = COMMON + `
+  const BURNING_SHIP =
+    COMMON +
+    `
     void main() {
       vec2 c = toFractal();
       // Seed-driven view offset (bounded, continuous, deterministic in u_seed).
@@ -465,7 +523,9 @@ const Shaders = (() => {
     }
   `;
 
-  const NEWTON = COMMON + `
+  const NEWTON =
+    COMMON +
+    `
     void main() {
       vec2 c = toFractal();
       vec2 z = c;
@@ -503,7 +563,9 @@ const Shaders = (() => {
     }
   `;
 
-  const SIERPINSKI = COMMON + `
+  const SIERPINSKI =
+    COMMON +
+    `
     void main() {
       vec2 p = toFractal();
       // Seed-driven domain offset (bounded, continuous, deterministic in u_seed).
@@ -528,7 +590,9 @@ const Shaders = (() => {
 
   /* ---------------- Experimental fractals ---------------- */
 
-  const COSMIC_NEBULA = COMMON + `
+  const COSMIC_NEBULA =
+    COMMON +
+    `
     void main() {
       vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
       // Seed shifts the nebula field (bounded, continuous, deterministic in u_seed).
@@ -553,7 +617,9 @@ const Shaders = (() => {
     }
   `;
 
-  const DREAMSCAPE = COMMON + `
+  const DREAMSCAPE =
+    COMMON +
+    `
     void main() {
       vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
       float t = u_time * 0.1 * u_anim;
@@ -573,7 +639,9 @@ const Shaders = (() => {
     }
   `;
 
-  const NEURAL_BLOOM = COMMON + `
+  const NEURAL_BLOOM =
+    COMMON +
+    `
     void main() {
       vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
       float t = u_time * 0.15 * u_anim;
@@ -591,7 +659,9 @@ const Shaders = (() => {
     }
   `;
 
-  const QUANTUM_FIELD = COMMON + `
+  const QUANTUM_FIELD =
+    COMMON +
+    `
     void main() {
       vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
       float t = u_time * 0.2 * u_anim;
@@ -613,7 +683,9 @@ const Shaders = (() => {
 
   /* ---------------- 3D Mandelbulb (raymarched) ---------------- */
 
-  const MANDELBULB = COMMON + `
+  const MANDELBULB =
+    COMMON +
+    `
     uniform vec3 u_cam_pos;
     uniform vec3 u_cam_target;
     uniform float u_power;
@@ -700,7 +772,9 @@ const Shaders = (() => {
   `;
 
   // Bright pass: isolate luminous regions for bloom.
-  const BRIGHT_PASS = POST_HEADER + `
+  const BRIGHT_PASS =
+    POST_HEADER +
+    `
     uniform float u_threshold;
     void main() {
       vec4 c = texture2D(u_texture, vUv);
@@ -711,7 +785,9 @@ const Shaders = (() => {
   `;
 
   // Separable Gaussian blur (direction via u_direction).
-  const BLUR = POST_HEADER + `
+  const BLUR =
+    POST_HEADER +
+    `
     uniform vec2 u_direction;
     void main() {
       vec2 off = u_direction / u_resolution;
@@ -727,7 +803,9 @@ const Shaders = (() => {
   `;
 
   // Composite: base + bloom + trails + chromatic aberration + vignette + fog.
-  const COMPOSITE = POST_HEADER + `
+  const COMPOSITE =
+    POST_HEADER +
+    `
     uniform sampler2D u_bloom;
     uniform sampler2D u_trails;
     uniform float u_bloom_strength;
@@ -784,7 +862,9 @@ const Shaders = (() => {
   `;
 
   // Feedback: accumulate the base frame into a trails buffer (ping-ponged).
-  const FEEDBACK = POST_HEADER + `
+  const FEEDBACK =
+    POST_HEADER +
+    `
     uniform sampler2D u_base;
     uniform sampler2D u_trails;
     uniform float u_fade;
@@ -796,7 +876,9 @@ const Shaders = (() => {
   `;
 
   // Simple texture display (used for L-System canvas -> texture).
-  const TEXTURE_DISPLAY = POST_HEADER + `
+  const TEXTURE_DISPLAY =
+    POST_HEADER +
+    `
     uniform float u_contrast;
     void main() {
       vec4 c = texture2D(u_texture, vUv);
@@ -808,10 +890,21 @@ const Shaders = (() => {
 
   return {
     VERTEX,
-    MANDELBROT, JULIA, BURNING_SHIP, NEWTON, SIERPINSKI,
-    COSMIC_NEBULA, DREAMSCAPE, NEURAL_BLOOM, QUANTUM_FIELD,
+    MANDELBROT,
+    JULIA,
+    BURNING_SHIP,
+    NEWTON,
+    SIERPINSKI,
+    COSMIC_NEBULA,
+    DREAMSCAPE,
+    NEURAL_BLOOM,
+    QUANTUM_FIELD,
     MANDELBULB,
-    BRIGHT_PASS, BLUR, COMPOSITE, FEEDBACK, TEXTURE_DISPLAY,
+    BRIGHT_PASS,
+    BLUR,
+    COMPOSITE,
+    FEEDBACK,
+    TEXTURE_DISPLAY
   };
 })();
 
@@ -821,26 +914,82 @@ const Shaders = (() => {
 const ColorSystem = (() => {
   // IQ cosine palettes: color(t) = a + b * cos(2π(c*t + d)), each a/b/c/d is RGB.
   const PALETTES = [
-    { name: 'Cyber Neon',    a: [0.5, 0.5, 0.5], b: [0.9, 0.9, 0.9], c: [1.0, 1.0, 1.0], d: [0.0, 0.33, 0.67] },
-    { name: 'Cosmic Sunset', a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1.0, 1.0, 1.0], d: [0.8, 0.7, 0.2] },
-    { name: 'Aurora',        a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1.0, 1.0, 1.0], d: [0.4, 0.3, 0.2] },
-    { name: 'Deep Ocean',    a: [0.1, 0.2, 0.4], b: [0.2, 0.3, 0.4], c: [1.0, 1.0, 1.0], d: [0.6, 0.7, 0.8] },
-    { name: 'Firestorm',     a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1.0, 1.0, 1.0], d: [0.0, 0.1, 0.2] },
-    { name: 'Monochrome',    a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1.0, 1.0, 1.0], d: [0.0, 0.0, 0.0] },
-    { name: 'Vaporwave',     a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1.0, 1.0, 1.0], d: [0.5, 0.8, 0.9] },
-    { name: 'Synthwave',     a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1.0, 1.0, 1.0], d: [0.9, 0.9, 0.4] },
-    { name: 'Rainbow',       a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1.0, 1.0, 1.0], d: [0.0, 0.33, 0.67] },
+    {
+      name: 'Cyber Neon',
+      a: [0.5, 0.5, 0.5],
+      b: [0.9, 0.9, 0.9],
+      c: [1.0, 1.0, 1.0],
+      d: [0.0, 0.33, 0.67]
+    },
+    {
+      name: 'Cosmic Sunset',
+      a: [0.5, 0.5, 0.5],
+      b: [0.5, 0.5, 0.5],
+      c: [1.0, 1.0, 1.0],
+      d: [0.8, 0.7, 0.2]
+    },
+    {
+      name: 'Aurora',
+      a: [0.5, 0.5, 0.5],
+      b: [0.5, 0.5, 0.5],
+      c: [1.0, 1.0, 1.0],
+      d: [0.4, 0.3, 0.2]
+    },
+    {
+      name: 'Deep Ocean',
+      a: [0.1, 0.2, 0.4],
+      b: [0.2, 0.3, 0.4],
+      c: [1.0, 1.0, 1.0],
+      d: [0.6, 0.7, 0.8]
+    },
+    {
+      name: 'Firestorm',
+      a: [0.5, 0.5, 0.5],
+      b: [0.5, 0.5, 0.5],
+      c: [1.0, 1.0, 1.0],
+      d: [0.0, 0.1, 0.2]
+    },
+    {
+      name: 'Monochrome',
+      a: [0.5, 0.5, 0.5],
+      b: [0.5, 0.5, 0.5],
+      c: [1.0, 1.0, 1.0],
+      d: [0.0, 0.0, 0.0]
+    },
+    {
+      name: 'Vaporwave',
+      a: [0.5, 0.5, 0.5],
+      b: [0.5, 0.5, 0.5],
+      c: [1.0, 1.0, 1.0],
+      d: [0.5, 0.8, 0.9]
+    },
+    {
+      name: 'Synthwave',
+      a: [0.5, 0.5, 0.5],
+      b: [0.5, 0.5, 0.5],
+      c: [1.0, 1.0, 1.0],
+      d: [0.9, 0.9, 0.4]
+    },
+    {
+      name: 'Rainbow',
+      a: [0.5, 0.5, 0.5],
+      b: [0.5, 0.5, 0.5],
+      c: [1.0, 1.0, 1.0],
+      d: [0.0, 0.33, 0.67]
+    }
   ];
 
   const state = {
     index: 0,
-    speed: 0.2,        // cycling speed
-    contrast: 1.0,     // contrast multiplier
-    cycling: false,    // animated palette cycling
-    cycleOffset: 0,    // transient animated offset (NOT serialized; base phase lives in State)
+    speed: 0.2, // cycling speed
+    contrast: 1.0, // contrast multiplier
+    cycling: false, // animated palette cycling
+    cycleOffset: 0 // transient animated offset (NOT serialized; base phase lives in State)
   };
 
-  function current() { return PALETTES[state.index]; }
+  function current() {
+    return PALETTES[state.index];
+  }
 
   function setIndex(i) {
     state.index = Util.clamp(i, 0, PALETTES.length - 1);
@@ -854,7 +1003,9 @@ const ColorSystem = (() => {
   }
 
   // Reset the transient animated offset (e.g., when applying a saved world).
-  function resetCycle() { state.cycleOffset = 0; }
+  function resetCycle() {
+    state.cycleOffset = 0;
+  }
 
   // Effective render phase = user base phase + animated cycle offset.
   function effectivePhase(basePhase) {
@@ -889,16 +1040,31 @@ const ColorSystem = (() => {
     const stops = [];
     for (let i = 0; i <= 8; i++) {
       const t = i / 8;
-      const r = Math.round(Util.clamp(p.a[0] + p.b[0] * Math.cos(6.28318530718 * (p.c[0] * t + p.d[0])), 0, 1) * 255);
-      const g = Math.round(Util.clamp(p.a[1] + p.b[1] * Math.cos(6.28318530718 * (p.c[1] * t + p.d[1])), 0, 1) * 255);
-      const b = Math.round(Util.clamp(p.a[2] + p.b[2] * Math.cos(6.28318530718 * (p.c[2] * t + p.d[2])), 0, 1) * 255);
+      const r = Math.round(
+        Util.clamp(p.a[0] + p.b[0] * Math.cos(6.28318530718 * (p.c[0] * t + p.d[0])), 0, 1) * 255
+      );
+      const g = Math.round(
+        Util.clamp(p.a[1] + p.b[1] * Math.cos(6.28318530718 * (p.c[1] * t + p.d[1])), 0, 1) * 255
+      );
+      const b = Math.round(
+        Util.clamp(p.a[2] + p.b[2] * Math.cos(6.28318530718 * (p.c[2] * t + p.d[2])), 0, 1) * 255
+      );
       stops.push(`rgb(${r},${g},${b}) ${i * 12.5}%`);
     }
     return `linear-gradient(90deg, ${stops.join(', ')})`;
   }
 
   return {
-    PALETTES, state, current, setIndex, tick, resetCycle, effectivePhase, sample, cssGradient, cssGradientFor,
+    PALETTES,
+    state,
+    current,
+    setIndex,
+    tick,
+    resetCycle,
+    effectivePhase,
+    sample,
+    cssGradient,
+    cssGradientFor
   };
 })();
 
@@ -909,31 +1075,158 @@ const Fractals = (() => {
   // Each mode maps to a shader source and a default parameter set.
   // `group` drives the left-panel grouping; `kind` drives the render path.
   const MODES = {
-    mandelbrot:     { label: 'Mandelbrot',     group: 'classic',      kind: 'gpu',    shader: 'MANDELBROT',     center: [-0.6, 0.0],   span: 3.2,  iterations: 256 },
-    julia:          { label: 'Julia Set',      group: 'classic',      kind: 'gpu',    shader: 'JULIA',          center: [0.0, 0.0],    span: 3.4,  iterations: 256 },
-    burningShip:    { label: 'Burning Ship',   group: 'classic',      kind: 'gpu',    shader: 'BURNING_SHIP',   center: [-0.5, 0.0],   span: 3.4,  iterations: 256 },
-    newton:         { label: 'Newton',         group: 'classic',      kind: 'gpu',    shader: 'NEWTON',         center: [0.0, 0.0],    span: 3.0,  iterations: 64 },
-    sierpinski:     { label: 'Sierpinski',     group: 'classic',      kind: 'gpu',    shader: 'SIERPINSKI',     center: [0.0, 0.0],    span: 2.4,  iterations: 256 },
-    cosmicNebula:   { label: 'Cosmic Nebula',  group: 'experimental', kind: 'gpu',    shader: 'COSMIC_NEBULA',  center: [0.0, 0.0],    span: 2.0,  iterations: 256 },
-    dreamscape:     { label: 'Dreamscape',     group: 'experimental', kind: 'gpu',    shader: 'DREAMSCAPE',     center: [0.0, 0.0],    span: 2.0,  iterations: 256 },
-    neuralBloom:    { label: 'Neural Bloom',   group: 'experimental', kind: 'gpu',    shader: 'NEURAL_BLOOM',   center: [0.0, 0.0],    span: 2.0,  iterations: 256 },
-    quantumField:   { label: 'Quantum Field',  group: 'experimental', kind: 'gpu',    shader: 'QUANTUM_FIELD',  center: [0.0, 0.0],    span: 2.0,  iterations: 256 },
-    koch:           { label: 'Koch Snowflake', group: 'structural',   kind: 'lsystem', lsystem: 'koch',        center: [0.0, 0.0],    span: 2.0,  iterations: 256 },
-    dragon:         { label: 'Dragon Curve',   group: 'structural',   kind: 'lsystem', lsystem: 'dragon',      center: [0.0, 0.0],    span: 2.0,  iterations: 256 },
-    tree:           { label: 'Fractal Tree',   group: 'structural',   kind: 'lsystem', lsystem: 'tree',        center: [0.0, 0.0],    span: 2.0,  iterations: 256 },
-    plant:          { label: 'Plant Growth',   group: 'structural',   kind: 'lsystem', lsystem: 'plant',       center: [0.0, 0.0],    span: 2.0,  iterations: 256 },
-    mandelbulb:     { label: 'Mandelbulb',     group: '3d',           kind: 'gpu3d',  shader: 'MANDELBULB',     center: [0.0, 0.0],    span: 2.0,  iterations: 256, power: 8 },
+    mandelbrot: {
+      label: 'Mandelbrot',
+      group: 'classic',
+      kind: 'gpu',
+      shader: 'MANDELBROT',
+      center: [-0.6, 0.0],
+      span: 3.2,
+      iterations: 256
+    },
+    julia: {
+      label: 'Julia Set',
+      group: 'classic',
+      kind: 'gpu',
+      shader: 'JULIA',
+      center: [0.0, 0.0],
+      span: 3.4,
+      iterations: 256
+    },
+    burningShip: {
+      label: 'Burning Ship',
+      group: 'classic',
+      kind: 'gpu',
+      shader: 'BURNING_SHIP',
+      center: [-0.5, 0.0],
+      span: 3.4,
+      iterations: 256
+    },
+    newton: {
+      label: 'Newton',
+      group: 'classic',
+      kind: 'gpu',
+      shader: 'NEWTON',
+      center: [0.0, 0.0],
+      span: 3.0,
+      iterations: 64
+    },
+    sierpinski: {
+      label: 'Sierpinski',
+      group: 'classic',
+      kind: 'gpu',
+      shader: 'SIERPINSKI',
+      center: [0.0, 0.0],
+      span: 2.4,
+      iterations: 256
+    },
+    cosmicNebula: {
+      label: 'Cosmic Nebula',
+      group: 'experimental',
+      kind: 'gpu',
+      shader: 'COSMIC_NEBULA',
+      center: [0.0, 0.0],
+      span: 2.0,
+      iterations: 256
+    },
+    dreamscape: {
+      label: 'Dreamscape',
+      group: 'experimental',
+      kind: 'gpu',
+      shader: 'DREAMSCAPE',
+      center: [0.0, 0.0],
+      span: 2.0,
+      iterations: 256
+    },
+    neuralBloom: {
+      label: 'Neural Bloom',
+      group: 'experimental',
+      kind: 'gpu',
+      shader: 'NEURAL_BLOOM',
+      center: [0.0, 0.0],
+      span: 2.0,
+      iterations: 256
+    },
+    quantumField: {
+      label: 'Quantum Field',
+      group: 'experimental',
+      kind: 'gpu',
+      shader: 'QUANTUM_FIELD',
+      center: [0.0, 0.0],
+      span: 2.0,
+      iterations: 256
+    },
+    koch: {
+      label: 'Koch Snowflake',
+      group: 'structural',
+      kind: 'lsystem',
+      lsystem: 'koch',
+      center: [0.0, 0.0],
+      span: 2.0,
+      iterations: 256
+    },
+    dragon: {
+      label: 'Dragon Curve',
+      group: 'structural',
+      kind: 'lsystem',
+      lsystem: 'dragon',
+      center: [0.0, 0.0],
+      span: 2.0,
+      iterations: 256
+    },
+    tree: {
+      label: 'Fractal Tree',
+      group: 'structural',
+      kind: 'lsystem',
+      lsystem: 'tree',
+      center: [0.0, 0.0],
+      span: 2.0,
+      iterations: 256
+    },
+    plant: {
+      label: 'Plant Growth',
+      group: 'structural',
+      kind: 'lsystem',
+      lsystem: 'plant',
+      center: [0.0, 0.0],
+      span: 2.0,
+      iterations: 256
+    },
+    mandelbulb: {
+      label: 'Mandelbulb',
+      group: '3d',
+      kind: 'gpu3d',
+      shader: 'MANDELBULB',
+      center: [0.0, 0.0],
+      span: 2.0,
+      iterations: 256,
+      power: 8
+    }
   };
 
   const ORDER = [
-    'mandelbrot', 'julia', 'burningShip', 'newton', 'sierpinski',
-    'cosmicNebula', 'dreamscape', 'neuralBloom', 'quantumField',
-    'koch', 'dragon', 'tree', 'plant',
-    'mandelbulb',
+    'mandelbrot',
+    'julia',
+    'burningShip',
+    'newton',
+    'sierpinski',
+    'cosmicNebula',
+    'dreamscape',
+    'neuralBloom',
+    'quantumField',
+    'koch',
+    'dragon',
+    'tree',
+    'plant',
+    'mandelbulb'
   ];
 
-  function get(id) { return MODES[id]; }
-  function list(group) { return ORDER.filter((id) => MODES[id].group === group); }
+  function get(id) {
+    return MODES[id];
+  }
+  function list(group) {
+    return ORDER.filter((id) => MODES[id].group === group);
+  }
 
   return { MODES, ORDER, get, list };
 })();
@@ -958,7 +1251,7 @@ const Engine = (() => {
     DREAMSCAPE: Shaders.DREAMSCAPE,
     NEURAL_BLOOM: Shaders.NEURAL_BLOOM,
     QUANTUM_FIELD: Shaders.QUANTUM_FIELD,
-    MANDELBULB: Shaders.MANDELBULB,
+    MANDELBULB: Shaders.MANDELBULB
   };
 
   function getProgram(name) {
@@ -976,7 +1269,7 @@ const Engine = (() => {
       BLUR: Shaders.BLUR,
       COMPOSITE: Shaders.COMPOSITE,
       FEEDBACK: Shaders.FEEDBACK,
-      TEXTURE_DISPLAY: Shaders.TEXTURE_DISPLAY,
+      TEXTURE_DISPLAY: Shaders.TEXTURE_DISPLAY
     };
     if (!programCache[name]) {
       const src = map[name];
@@ -986,8 +1279,12 @@ const Engine = (() => {
     return programCache[name];
   }
 
-  function setMode(id) { currentModeId = id; }
-  function getMode() { return currentModeId; }
+  function setMode(id) {
+    currentModeId = id;
+  }
+  function getMode() {
+    return currentModeId;
+  }
 
   // Create/size the L-system 2D canvas (setting width clears it).
   function ensureLsystemCanvas(width, height) {
@@ -1071,8 +1368,12 @@ const Engine = (() => {
   }
 
   return {
-    setMode, getMode, renderFractal, getPostProgram, resetPrograms,
-    getLsystemCanvas: () => lsystemCanvas,
+    setMode,
+    getMode,
+    renderFractal,
+    getPostProgram,
+    resetPrograms,
+    getLsystemCanvas: () => lsystemCanvas
   };
 })();
 
@@ -1082,10 +1383,28 @@ const Engine = (() => {
    ============================================================ */
 const LSystem = (() => {
   const SYSTEMS = {
-    koch:   { axiom: 'F--F--F', rules: { F: 'F+F--F+' }, angle: 60,   iterations: 4, startAngle: 90 },
-    dragon: { axiom: 'FX',      rules: { X: 'X+YF+', Y: '-FX-Y' }, angle: 90, iterations: 10, startAngle: 0 },
-    tree:   { axiom: 'X',       rules: { X: 'F+[[X]-X]-F[-FX]+X', F: 'FF' }, angle: 25, iterations: 4, startAngle: 90 },
-    plant:  { axiom: 'X',       rules: { X: 'F[+X][-X]FX', F: 'FF' }, angle: 25.7, iterations: 5, startAngle: 90 },
+    koch: { axiom: 'F--F--F', rules: { F: 'F+F--F+' }, angle: 60, iterations: 4, startAngle: 90 },
+    dragon: {
+      axiom: 'FX',
+      rules: { X: 'X+YF+', Y: '-FX-Y' },
+      angle: 90,
+      iterations: 10,
+      startAngle: 0
+    },
+    tree: {
+      axiom: 'X',
+      rules: { X: 'F+[[X]-X]-F[-FX]+X', F: 'FF' },
+      angle: 25,
+      iterations: 4,
+      startAngle: 90
+    },
+    plant: {
+      axiom: 'X',
+      rules: { X: 'F[+X][-X]FX', F: 'FF' },
+      angle: 25.7,
+      iterations: 5,
+      startAngle: 90
+    }
   };
 
   function generate(system, iterations) {
@@ -1111,35 +1430,50 @@ const LSystem = (() => {
     const growth = params && params.growth != null ? params.growth : 1;
     const full = generate(system, system.iterations);
     const str = full.slice(0, Math.max(1, Math.floor(full.length * growth)));
-    const angle = system.angle * Math.PI / 180;
+    const angle = (system.angle * Math.PI) / 180;
 
     // Turtle pass in unit space, collecting segments grouped by depth.
-    let x = 0, y = 0, dir = system.startAngle * Math.PI / 180;
+    let x = 0,
+      y = 0,
+      dir = (system.startAngle * Math.PI) / 180;
     const stack = [];
     let depth = 0;
     const groups = {};
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    let minX = Infinity,
+      maxX = -Infinity,
+      minY = Infinity,
+      maxY = -Infinity;
     for (let i = 0; i < str.length; i++) {
       const ch = str[i];
       if (ch === 'F' || ch === 'G') {
         const nx = x + Math.cos(dir);
         const ny = y + Math.sin(dir);
         (groups[depth] = groups[depth] || []).push(x, y, nx, ny);
-        x = nx; y = ny;
-        if (x < minX) minX = x; if (x > maxX) maxX = x;
-        if (y < minY) minY = y; if (y > maxY) maxY = y;
+        x = nx;
+        y = ny;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
       } else if (ch === '+') dir += angle;
       else if (ch === '-') dir -= angle;
-      else if (ch === '[') { stack.push(x, y, dir); depth++; }
-      else if (ch === ']') { dir = stack.pop(); y = stack.pop(); x = stack.pop(); depth--; }
+      else if (ch === '[') {
+        stack.push(x, y, dir);
+        depth++;
+      } else if (ch === ']') {
+        dir = stack.pop();
+        y = stack.pop();
+        x = stack.pop();
+        depth--;
+      }
     }
     if (minX === Infinity) return;
 
     // Fit to canvas with margin, centered.
-    const spanX = (maxX - minX) || 1;
-    const spanY = (maxY - minY) || 1;
+    const spanX = maxX - minX || 1;
+    const spanY = maxY - minY || 1;
     const margin = 0.14;
-    const scale = Math.min(width * (1 - 2 * margin) / spanX, height * (1 - 2 * margin) / spanY);
+    const scale = Math.min((width * (1 - 2 * margin)) / spanX, (height * (1 - 2 * margin)) / spanY);
     const offX = width / 2 - (minX + spanX / 2) * scale;
     const offY = height / 2 - (minY + spanY / 2) * scale;
     const tx = (v) => v * scale + offX;
@@ -1180,13 +1514,14 @@ const Effects = (() => {
   let blurBFBO = null;
   let trailsA = null;
   let trailsB = null;
-  let trailsRead = null;   // the buffer the composite pass samples
-  let trailsWrite = null;  // the buffer the feedback pass writes
+  let trailsRead = null; // the buffer the composite pass samples
+  let trailsWrite = null; // the buffer the feedback pass writes
   let width = 0;
   let height = 0;
 
   function resize(w, h) {
-    width = w; height = h;
+    width = w;
+    height = h;
     const bw = Math.max(1, Math.floor(w / 4));
     const bh = Math.max(1, Math.floor(h / 4));
     [brightFBO, blurAFBO, blurBFBO].forEach((f) => GL.deleteFBO(f));
@@ -1209,7 +1544,6 @@ const Effects = (() => {
   // Run the full post pipeline. `baseFBO` holds the rendered fractal.
   // `outTarget` (optional) composites to an FBO instead of the screen.
   function render(baseFBO, params, outTarget) {
-    const gl = GL.gl;
     const bw = brightFBO.width;
     const bh = brightFBO.height;
 
@@ -1264,7 +1598,9 @@ const Effects = (() => {
       GL.setUniform('u_trails', 1, fb);
       GL.setUniform('u_fade', params.trails, fb);
       GL.render(fb, trailsWrite, width, height);
-      const tmp = trailsRead; trailsRead = trailsWrite; trailsWrite = tmp;
+      const tmp = trailsRead;
+      trailsRead = trailsWrite;
+      trailsWrite = tmp;
     }
   }
 
@@ -1288,7 +1624,7 @@ const Effects = (() => {
    ============================================================ */
 const Camera = (() => {
   let center = { x: -0.6, y: 0.0 };
-  let zoom = 100;          // pixels per fractal unit
+  let zoom = 100; // pixels per fractal unit
   let camPos = [0, 0.6, 3.0];
   let camTarget = [0, 0, 0];
   let camAngle = 0;
@@ -1315,7 +1651,8 @@ const Camera = (() => {
 
   // Zoom toward a screen point (CSS coords, y-down).
   function zoomAt(factor, screenX, screenY) {
-    const w = window.innerWidth, h = window.innerHeight;
+    const w = window.innerWidth,
+      h = window.innerHeight;
     const fx = center.x + (screenX - w / 2) / zoom;
     const fy = center.y - (screenY - h / 2) / zoom;
     zoom = Util.clamp(zoom * factor, 0.5, 1e9);
@@ -1328,7 +1665,9 @@ const Camera = (() => {
   }
 
   // Push an absolute zoom (keeps Camera in sync with the zoom slider).
-  function setZoom(z) { zoom = Util.clamp(z, 0.5, 1e9); }
+  function setZoom(z) {
+    zoom = Util.clamp(z, 0.5, 1e9);
+  }
 
   // Push an absolute 2D center (used when applying a saved/randomized world).
   function setCenter(x, y) {
@@ -1338,7 +1677,8 @@ const Camera = (() => {
 
   // Focus: bring the point under the cursor to center and zoom in.
   function focusAt(screenX, screenY) {
-    const w = window.innerWidth, h = window.innerHeight;
+    const w = window.innerWidth,
+      h = window.innerHeight;
     center.x += (screenX - w / 2) / zoom;
     center.y -= (screenY - h / 2) / zoom;
     zoomAt(2.2, w / 2, h / 2);
@@ -1353,20 +1693,42 @@ const Camera = (() => {
     camAngle = Number.isFinite(a) ? a : 0;
     applyOrbit();
   }
-  function getAngle() { return camAngle; }
+  function getAngle() {
+    return camAngle;
+  }
   function setOrbitRadius(r) {
     orbitRadius = Util.clamp(Number.isFinite(r) ? r : 3.0, 1.5, 8.0);
     applyOrbit();
   }
-  function getOrbitRadius() { return orbitRadius; }
+  function getOrbitRadius() {
+    return orbitRadius;
+  }
 
   return {
-    get center() { return center; },
-    get zoom() { return zoom; },
-    get camPos() { return camPos; },
-    get camTarget() { return camTarget; },
-    reset, pan, zoomAt, zoomCenter, focusAt, setZoom, setCenter,
-    rotate3d, setAngle, getAngle, setOrbitRadius, getOrbitRadius,
+    get center() {
+      return center;
+    },
+    get zoom() {
+      return zoom;
+    },
+    get camPos() {
+      return camPos;
+    },
+    get camTarget() {
+      return camTarget;
+    },
+    reset,
+    pan,
+    zoomAt,
+    zoomCenter,
+    focusAt,
+    setZoom,
+    setCenter,
+    rotate3d,
+    setAngle,
+    getAngle,
+    setOrbitRadius,
+    getOrbitRadius
   };
 })();
 
@@ -1377,7 +1739,6 @@ const Interaction = (() => {
   // Handlers the App registers.
   let onPan = null;
   let onZoom = null;
-  let onRotate = null;
   let onFocus = null;
   let onAction = null;
 
@@ -1393,36 +1754,47 @@ const Interaction = (() => {
   function register(handlers) {
     onPan = handlers.onPan || null;
     onZoom = handlers.onZoom || null;
-    onRotate = handlers.onRotate || null;
     onFocus = handlers.onFocus || null;
     onAction = handlers.onAction || null;
   }
 
-  function setEnabled(v) { pointerEnabled = v; }
-  function setKeyboardEnabled(v) { keyboardEnabled = v; }
+  function setEnabled(v) {
+    pointerEnabled = v;
+  }
+  function setKeyboardEnabled(v) {
+    keyboardEnabled = v;
+  }
 
   function init(canvas) {
     // --- Mouse ---
     canvas.addEventListener('mousedown', (e) => {
       if (!pointerEnabled) return;
       dragging = true;
-      lastX = e.clientX; lastY = e.clientY;
+      lastX = e.clientX;
+      lastY = e.clientY;
     });
     window.addEventListener('mousemove', (e) => {
       if (!dragging || !pointerEnabled) return;
       const dx = e.clientX - lastX;
       const dy = e.clientY - lastY;
-      lastX = e.clientX; lastY = e.clientY;
+      lastX = e.clientX;
+      lastY = e.clientY;
       if (onPan) onPan(dx, dy);
     });
-    window.addEventListener('mouseup', () => { dragging = false; });
+    window.addEventListener('mouseup', () => {
+      dragging = false;
+    });
 
-    canvas.addEventListener('wheel', (e) => {
-      if (!pointerEnabled || !onZoom) return;
-      e.preventDefault();
-      const factor = Math.exp(-e.deltaY * 0.0015);
-      onZoom(factor, e.clientX, e.clientY);
-    }, { passive: false });
+    canvas.addEventListener(
+      'wheel',
+      (e) => {
+        if (!pointerEnabled || !onZoom) return;
+        e.preventDefault();
+        const factor = Math.exp(-e.deltaY * 0.0015);
+        onZoom(factor, e.clientX, e.clientY);
+      },
+      { passive: false }
+    );
 
     // Double-click focuses and recenters on the point (not a plain zoom).
     canvas.addEventListener('dblclick', (e) => {
@@ -1431,35 +1803,45 @@ const Interaction = (() => {
     });
 
     // --- Touch ---
-    canvas.addEventListener('touchstart', (e) => {
-      if (!pointerEnabled) return;
-      if (e.touches.length === 1) {
-        dragging = true;
-        lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
-      } else if (e.touches.length === 2) {
-        dragging = false;
-        pinchDist = touchDist(e.touches);
-      }
-    }, { passive: true });
-
-    canvas.addEventListener('touchmove', (e) => {
-      if (!pointerEnabled) return;
-      e.preventDefault();
-      if (e.touches.length === 1 && dragging) {
-        const dx = e.touches[0].clientX - lastX;
-        const dy = e.touches[0].clientY - lastY;
-        lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
-        if (onPan) onPan(dx, dy);
-      } else if (e.touches.length === 2 && onZoom) {
-        const d = touchDist(e.touches);
-        if (pinchDist > 0) {
-          const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-          const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-          onZoom(d / pinchDist, midX, midY);
+    canvas.addEventListener(
+      'touchstart',
+      (e) => {
+        if (!pointerEnabled) return;
+        if (e.touches.length === 1) {
+          dragging = true;
+          lastX = e.touches[0].clientX;
+          lastY = e.touches[0].clientY;
+        } else if (e.touches.length === 2) {
+          dragging = false;
+          pinchDist = touchDist(e.touches);
         }
-        pinchDist = d;
-      }
-    }, { passive: false });
+      },
+      { passive: true }
+    );
+
+    canvas.addEventListener(
+      'touchmove',
+      (e) => {
+        if (!pointerEnabled) return;
+        e.preventDefault();
+        if (e.touches.length === 1 && dragging) {
+          const dx = e.touches[0].clientX - lastX;
+          const dy = e.touches[0].clientY - lastY;
+          lastX = e.touches[0].clientX;
+          lastY = e.touches[0].clientY;
+          if (onPan) onPan(dx, dy);
+        } else if (e.touches.length === 2 && onZoom) {
+          const d = touchDist(e.touches);
+          if (pinchDist > 0) {
+            const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            onZoom(d / pinchDist, midX, midY);
+          }
+          pinchDist = d;
+        }
+      },
+      { passive: false }
+    );
 
     canvas.addEventListener('touchend', (e) => {
       if (e.touches.length === 0) dragging = false;
@@ -1474,24 +1856,60 @@ const Interaction = (() => {
       const key = e.key;
       const step = 40;
       switch (key) {
-        case 'ArrowLeft': onAction('pan', [-step, 0]); break;
-        case 'ArrowRight': onAction('pan', [step, 0]); break;
-        case 'ArrowUp': onAction('pan', [0, -step]); break;
-        case 'ArrowDown': onAction('pan', [0, step]); break;
-        case '+': case '=': onAction('zoom', [1.2]); break;
-        case '-': case '_': onAction('zoom', [1 / 1.2]); break;
-        case ' ': e.preventDefault(); onAction('pause'); break;
+        case 'ArrowLeft':
+          onAction('pan', [-step, 0]);
+          break;
+        case 'ArrowRight':
+          onAction('pan', [step, 0]);
+          break;
+        case 'ArrowUp':
+          onAction('pan', [0, -step]);
+          break;
+        case 'ArrowDown':
+          onAction('pan', [0, step]);
+          break;
+        case '+':
+        case '=':
+          onAction('zoom', [1.2]);
+          break;
+        case '-':
+        case '_':
+          onAction('zoom', [1 / 1.2]);
+          break;
+        case ' ':
+          e.preventDefault();
+          onAction('pause');
+          break;
         // App action keys: suppressed while a modal is open (focus is trapped
         // there) so they don't fire the action behind the dialog. Arrows, zoom,
         // and Space (pause) are intentionally left ungated.
-        case 'r': case 'R': if (!UI.isAnyModalOpen()) onAction('randomize'); break;
-        case 'n': case 'N': if (!UI.isAnyModalOpen()) onAction('newworld'); break;
-        case 's': case 'S': if (!UI.isAnyModalOpen()) onAction('share'); break;
-        case 'e': case 'E': if (!UI.isAnyModalOpen()) onAction('export'); break;
-        case 'g': case 'G': if (!UI.isAnyModalOpen()) onAction('gallery'); break;
-        case 'a': case 'A': if (!UI.isAnyModalOpen()) onAction('audio'); break;
+        case 'r':
+        case 'R':
+          if (!UI.isAnyModalOpen()) onAction('randomize');
+          break;
+        case 'n':
+        case 'N':
+          if (!UI.isAnyModalOpen()) onAction('newworld');
+          break;
+        case 's':
+        case 'S':
+          if (!UI.isAnyModalOpen()) onAction('share');
+          break;
+        case 'e':
+        case 'E':
+          if (!UI.isAnyModalOpen()) onAction('export');
+          break;
+        case 'g':
+        case 'G':
+          if (!UI.isAnyModalOpen()) onAction('gallery');
+          break;
+        case 'a':
+        case 'A':
+          if (!UI.isAnyModalOpen()) onAction('audio');
+          break;
         default:
-          if (key >= '1' && key <= '9' && !UI.isAnyModalOpen()) onAction('palette', [parseInt(key, 10) - 1]);
+          if (key >= '1' && key <= '9' && !UI.isAnyModalOpen())
+            onAction('palette', [parseInt(key, 10) - 1]);
       }
     });
   }
@@ -1531,7 +1949,7 @@ const State = (() => {
     growth: 1.0,
     camAngle: 0,
     orbitRadius: 3.0,
-    juliaPhase: 0.0,
+    juliaPhase: 0.0
   };
   let current = cloneDefaults();
 
@@ -1539,10 +1957,18 @@ const State = (() => {
     return Object.assign({}, defaults, { center: defaults.center.slice() });
   }
 
-  function set(partial) { Object.assign(current, partial); }
-  function get() { return current; }
-  function reset() { current = cloneDefaults(); }
-  function clone() { return Object.assign({}, current, { center: current.center.slice() }); }
+  function set(partial) {
+    Object.assign(current, partial);
+  }
+  function get() {
+    return current;
+  }
+  function reset() {
+    current = cloneDefaults();
+  }
+  function clone() {
+    return Object.assign({}, current, { center: current.center.slice() });
+  }
 
   return { defaults, set, get, reset, clone };
 })();
@@ -1570,10 +1996,7 @@ const Procedural = (() => {
     s.vignette = 0.2 + rng() * 0.5;
     s.fog = rng() * 0.5;
     s.power = 4 + Math.floor(rng() * 8);
-    s.center = [
-      mode.center[0] + (rng() - 0.5) * 0.6,
-      mode.center[1] + (rng() - 0.5) * 0.6,
-    ];
+    s.center = [mode.center[0] + (rng() - 0.5) * 0.6, mode.center[1] + (rng() - 0.5) * 0.6];
     s.zoom = ((window.innerHeight || 800) / mode.span) * (0.5 + rng() * 2.0);
     s.growth = 1.0;
   }
@@ -1617,10 +2040,28 @@ const Share = (() => {
 
   // Pick the fields worth sharing (drop transient ones).
   const FIELDS = [
-    'mode', 'seed', 'palette', 'palettePhase', 'paletteSpeed', 'cycling',
-    'contrast', 'iterations', 'detail', 'anim', 'bloom', 'trails',
-    'aberration', 'vignette', 'fog', 'power', 'center', 'zoom', 'growth',
-    'camAngle', 'orbitRadius', 'juliaPhase',
+    'mode',
+    'seed',
+    'palette',
+    'palettePhase',
+    'paletteSpeed',
+    'cycling',
+    'contrast',
+    'iterations',
+    'detail',
+    'anim',
+    'bloom',
+    'trails',
+    'aberration',
+    'vignette',
+    'fog',
+    'power',
+    'center',
+    'zoom',
+    'growth',
+    'camAngle',
+    'orbitRadius',
+    'juliaPhase'
   ];
 
   // Bounds for clamping untrusted numeric input.
@@ -1643,7 +2084,7 @@ const Share = (() => {
     growth: [0, 1],
     camAngle: [-1000, 1000],
     orbitRadius: [1.5, 8],
-    juliaPhase: [0, 100],
+    juliaPhase: [0, 100]
   };
 
   function encode() {
@@ -1667,9 +2108,10 @@ const Share = (() => {
     try {
       obj = JSON.parse(Util.b64urlDecode(raw));
     } catch (e) {
-      throw new Error('Malformed share code');
+      throw new Error('Malformed share code', { cause: e });
     }
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new Error('Malformed share code');
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj))
+      throw new Error('Malformed share code');
     if (obj.v !== undefined && obj.v !== VERSION) {
       throw new Error('Unsupported share code version: ' + obj.v);
     }
@@ -1695,9 +2137,10 @@ const Share = (() => {
       const v = Number(raw[k]);
       if (!Number.isFinite(v)) continue;
       const [lo, hi] = NUMERIC[k];
-      out[k] = (k === 'seed' || k === 'iterations' || k === 'palette')
-        ? Math.round(Util.clamp(v, lo, hi))
-        : Util.clamp(v, lo, hi);
+      out[k] =
+        k === 'seed' || k === 'iterations' || k === 'palette'
+          ? Math.round(Util.clamp(v, lo, hi))
+          : Util.clamp(v, lo, hi);
     }
     return out;
   }
@@ -1720,7 +2163,8 @@ const Exporter = (() => {
   // Render the current world to a 2D canvas at (w, h).
   // Preserves the on-screen framing by scaling zoom with height.
   function renderToCanvas(w, h, time) {
-    w = Math.round(w); h = Math.round(h);
+    w = Math.round(w);
+    h = Math.round(h);
     if (!Number.isFinite(w) || !Number.isFinite(h) || w < 16 || h < 16) {
       throw new Error('Invalid export dimensions');
     }
@@ -1730,8 +2174,10 @@ const Exporter = (() => {
     const exportZoom = s.zoom * (h / screenH);
 
     // Temporarily size the post pipeline to the export resolution.
-    const prevW = window.innerWidth, prevH = window.innerHeight;
-    let baseFBO = null, outFBO = null;
+    const prevW = window.innerWidth,
+      prevH = window.innerHeight;
+    let baseFBO = null,
+      outFBO = null;
     Effects.resize(w, h);
     try {
       baseFBO = GL.createFBO(w, h);
@@ -1739,11 +2185,11 @@ const Exporter = (() => {
 
       const params = Object.assign({}, s, {
         zoom: exportZoom,
-        time: (time != null) ? time : 0,
+        time: time != null ? time : 0,
         audio: [0, 0, 0],
         highContrast: A11y.get().highContrast ? 1 : 0,
         camPos: Camera.camPos,
-        camTarget: Camera.camTarget,
+        camTarget: Camera.camTarget
       });
 
       Engine.renderFractal(baseFBO, w, h, params);
@@ -1756,7 +2202,8 @@ const Exporter = (() => {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
       const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
+      canvas.width = w;
+      canvas.height = h;
       const ctx = canvas.getContext('2d');
       const img = ctx.createImageData(w, h);
       const data = img.data;
@@ -1801,7 +2248,8 @@ const Exporter = (() => {
 const Gallery = (() => {
   const KEY = 'fractal-forge:gallery';
   const SCHEMA_VERSION = 1;
-  const THUMB_W = 384, THUMB_H = 216;
+  const THUMB_W = 384,
+    THUMB_H = 216;
 
   function load() {
     try {
@@ -1809,7 +2257,11 @@ const Gallery = (() => {
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       // Support both the legacy bare-array format and the versioned envelope.
-      const arr = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.items) ? parsed.items : []);
+      const arr = Array.isArray(parsed)
+        ? parsed
+        : parsed && Array.isArray(parsed.items)
+          ? parsed.items
+          : [];
       return arr.filter((it) => it && typeof it === 'object' && it.id);
     } catch (e) {
       return [];
@@ -1819,7 +2271,8 @@ const Gallery = (() => {
   // Persist a versioned envelope. Returns { ok, trimmed?, error? } so callers
   // can report honest success/failure instead of assuming it worked.
   function persist(items) {
-    const write = (arr) => localStorage.setItem(KEY, JSON.stringify({ v: SCHEMA_VERSION, items: arr }));
+    const write = (arr) =>
+      localStorage.setItem(KEY, JSON.stringify({ v: SCHEMA_VERSION, items: arr }));
     try {
       write(items);
       return { ok: true };
@@ -1833,7 +2286,9 @@ const Gallery = (() => {
         try {
           write(sorted);
           return { ok: true, trimmed: items.length - sorted.length };
-        } catch (e2) { /* keep trimming */ }
+        } catch (e2) {
+          /* keep trimming */
+        }
       }
       return { ok: false, error: 'Browser storage is full and could not be trimmed.' };
     }
@@ -1852,11 +2307,11 @@ const Gallery = (() => {
     const items = load();
     const item = {
       id: 'ff-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e6).toString(36),
-      name: name || (Fractals.get(State.get().mode).label + ' #' + (items.length + 1)),
+      name: name || Fractals.get(State.get().mode).label + ' #' + (items.length + 1),
       createdAt: Date.now(),
       favorite: false,
       thumb: makeThumb(time),
-      state: State.clone(),
+      state: State.clone()
     };
     items.unshift(item);
     const result = persist(items);
@@ -1873,7 +2328,9 @@ const Gallery = (() => {
     });
   }
 
-  function get(id) { return load().find((it) => it.id === id) || null; }
+  function get(id) {
+    return load().find((it) => it.id === id) || null;
+  }
 
   function remove(id) {
     const items = load().filter((it) => it.id !== id);
@@ -1901,10 +2358,16 @@ const Gallery = (() => {
   }
 
   function clear() {
-    try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
+    try {
+      localStorage.removeItem(KEY);
+    } catch (e) {
+      /* ignore */
+    }
   }
 
-  function count() { return load().length; }
+  function count() {
+    return load().length;
+  }
 
   return { save, list, get, remove, toggleFavorite, restore, clear, count };
 })();
@@ -1914,13 +2377,16 @@ const Gallery = (() => {
    bass / mid / treble bands and exposes a smoothed overall level
    that the render pipeline can modulate.
    ============================================================ */
+// The module name intentionally shadows the built-in Audio constructor
+// (the built-in is not used anywhere in this app).
+// eslint-disable-next-line no-redeclare
 const Audio = (() => {
   let ctx = null;
   let analyser = null;
   let stream = null;
   let freqData = null;
   let enabled = false;
-  let level = 0;        // smoothed overall level [0,1]
+  let level = 0; // smoothed overall level [0,1]
   let bands = { bass: 0, mid: 0, treble: 0 };
 
   async function enable() {
@@ -1977,7 +2443,7 @@ const Audio = (() => {
     const raw = {
       bass: bandAvg(freqData, 0, n * 0.1),
       mid: bandAvg(freqData, n * 0.1, n * 0.5),
-      treble: bandAvg(freqData, n * 0.5, n),
+      treble: bandAvg(freqData, n * 0.5, n)
     };
     const overall = raw.bass * 0.5 + raw.mid * 0.35 + raw.treble * 0.15;
     // Smooth toward the target for a musical, non-jittery response.
@@ -1986,7 +2452,9 @@ const Audio = (() => {
     return { level, bands };
   }
 
-  function isEnabled() { return enabled; }
+  function isEnabled() {
+    return enabled;
+  }
 
   return { enable, disable, sample, isEnabled };
 })();
@@ -1999,10 +2467,10 @@ const Ambient = (() => {
   let canvas = null;
   let ctx = null;
   let particles = [];
-  let w = 0, h = 0;
+  let w = 0,
+    h = 0;
   let enabled = true;
   let reducedMotion = false;
-  let running = false;
 
   function makeParticles() {
     const count = Math.min(140, Math.floor((w * h) / 14000));
@@ -2015,7 +2483,7 @@ const Ambient = (() => {
         vx: (Math.random() - 0.5) * 0.15,
         vy: (Math.random() - 0.5) * 0.15,
         a: 0.15 + Math.random() * 0.5,
-        hue: 220 + Math.random() * 80,
+        hue: 220 + Math.random() * 80
       });
     }
   }
@@ -2030,7 +2498,8 @@ const Ambient = (() => {
   function resize() {
     if (!canvas) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    w = window.innerWidth; h = window.innerHeight;
+    w = window.innerWidth;
+    h = window.innerHeight;
     canvas.width = Math.floor(w * dpr);
     canvas.height = Math.floor(h * dpr);
     canvas.style.width = w + 'px';
@@ -2039,7 +2508,9 @@ const Ambient = (() => {
     makeParticles();
   }
 
-  function setEnabled(v) { enabled = v; }
+  function setEnabled(v) {
+    enabled = v;
+  }
   function setReducedMotion(v) {
     reducedMotion = v;
     if (v) drawStatic();
@@ -2063,8 +2534,10 @@ const Ambient = (() => {
     for (const p of particles) {
       p.x += p.vx * dt * 60;
       p.y += p.vy * dt * 60;
-      if (p.x < -5) p.x = w + 5; else if (p.x > w + 5) p.x = -5;
-      if (p.y < -5) p.y = h + 5; else if (p.y > h + 5) p.y = -5;
+      if (p.x < -5) p.x = w + 5;
+      else if (p.x > w + 5) p.x = -5;
+      if (p.y < -5) p.y = h + 5;
+      else if (p.y > h + 5) p.y = -5;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
       ctx.fillStyle = `hsla(${p.hue}, 60%, 72%, ${p.a})`;
@@ -2085,7 +2558,7 @@ const A11y = (() => {
     reducedMotion: false,
     highContrast: false,
     adaptive: true,
-    keyboard: true,
+    keyboard: true
   };
   let settings = Object.assign({}, defaults);
 
@@ -2093,7 +2566,9 @@ const A11y = (() => {
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) settings = Object.assign({}, defaults, JSON.parse(raw));
-    } catch (e) { /* keep defaults */ }
+    } catch (e) {
+      /* keep defaults */
+    }
     // Respect the OS-level reduced-motion preference on first run.
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       settings.reducedMotion = true;
@@ -2101,10 +2576,16 @@ const A11y = (() => {
   }
 
   function persist() {
-    try { localStorage.setItem(KEY, JSON.stringify(settings)); } catch (e) { /* ignore */ }
+    try {
+      localStorage.setItem(KEY, JSON.stringify(settings));
+    } catch (e) {
+      /* ignore */
+    }
   }
 
-  function get() { return Object.assign({}, settings); }
+  function get() {
+    return Object.assign({}, settings);
+  }
   function set(partial) {
     Object.assign(settings, partial);
     persist();
@@ -2124,8 +2605,7 @@ const A11y = (() => {
    ============================================================ */
 const UI = (() => {
   const $ = (id) => document.getElementById(id);
-  let actions = {};      // App-provided callbacks
-  let toastTimer = null;
+  let actions = {}; // App-provided callbacks
   let pendingConfirm = null; // callback for the confirm modal
 
   // ---------- Toasts ----------
@@ -2149,14 +2629,17 @@ const UI = (() => {
   // ---------- Modals ----------
   // Full modal behavior: focus moves in on open, is trapped while open,
   // Escape closes, focus returns to the opener, and the background is inert.
-  const modalStack = [];   // open modal ids, topmost last
-  const focusStack = [];   // element focused before each modal opened
+  const modalStack = []; // open modal ids, topmost last
+  const focusStack = []; // element focused before each modal opened
   let trapBound = false;
 
-  const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  const FOCUSABLE =
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
   function focusableIn(root) {
-    return Array.from(root.querySelectorAll(FOCUSABLE)).filter((el) => el.getClientRects().length > 0);
+    return Array.from(root.querySelectorAll(FOCUSABLE)).filter(
+      (el) => el.getClientRects().length > 0
+    );
   }
 
   function setInert(on) {
@@ -2165,16 +2648,22 @@ const UI = (() => {
       document.querySelector('.panel-left'),
       document.querySelector('.panel-right'),
       document.querySelector('.statusbar'),
-      document.querySelector('.onboarding'),
+      document.querySelector('.onboarding')
     ];
-    targets.forEach((el) => { if (el && 'inert' in el) el.inert = on; });
+    targets.forEach((el) => {
+      if (el && 'inert' in el) el.inert = on;
+    });
   }
 
-  function topModal() { return modalStack[modalStack.length - 1] || null; }
+  function topModal() {
+    return modalStack[modalStack.length - 1] || null;
+  }
 
   // True while at least one modal is open; used to gate keyboard action keys
   // so they don't fire the app action behind an open dialog.
-  function isAnyModalOpen() { return modalStack.length > 0; }
+  function isAnyModalOpen() {
+    return modalStack.length > 0;
+  }
 
   function trapFocus(e) {
     const id = topModal();
@@ -2239,7 +2728,9 @@ const UI = (() => {
         trapBound = false;
       }
     }
-    setTimeout(() => { m.hidden = true; }, 200);
+    setTimeout(() => {
+      m.hidden = true;
+    }, 200);
   }
 
   function closeAllModals() {
@@ -2251,7 +2742,9 @@ const UI = (() => {
     const el = $('onboarding');
     if (!el) return;
     el.classList.add('hide');
-    setTimeout(() => { el.hidden = true; }, 500);
+    setTimeout(() => {
+      el.hidden = true;
+    }, 500);
   }
 
   // ---------- Status bar ----------
@@ -2283,13 +2776,13 @@ const UI = (() => {
       classic: 'mode-list-classic',
       experimental: 'mode-list-experimental',
       structural: 'mode-list-structural',
-      '3d': 'mode-list-3d',
+      '3d': 'mode-list-3d'
     };
     for (const g of Object.keys(map)) {
       const container = $(map[g]);
       if (!container) continue;
       container.innerHTML = '';
-      for (const m of (groups[g] || [])) {
+      for (const m of groups[g] || []) {
         const btn = document.createElement('button');
         btn.className = 'mode-item';
         btn.dataset.mode = m.id;
@@ -2341,17 +2834,65 @@ const UI = (() => {
   // ---------- Sliders ----------
   // Each slider maps to a State key with a value transform.
   const SLIDERS = [
-    { id: 'grad-phase',    key: 'palettePhase', scale: 0.001, val: null,                fmt: (v) => Math.round(v * 1000) },
-    { id: 'grad-speed',    key: 'paletteSpeed', scale: 0.01,  val: null,                fmt: (v) => Math.round(v * 100) },
-    { id: 'grad-contrast', key: 'contrast',     scale: 0.01,  val: null,                fmt: (v) => Math.round(v * 100) },
-    { id: 'ctl-iterations',key: 'iterations',   scale: 1,     val: 'val-iterations',    fmt: (v) => Math.round(v) },
-    { id: 'ctl-detail',    key: 'detail',       scale: 0.01,  val: 'val-detail',        fmt: (v) => v.toFixed(1) },
-    { id: 'ctl-anim',      key: 'anim',         scale: 0.01,  val: 'val-anim',          fmt: (v) => Math.round(v * 100) },
-    { id: 'ctl-bloom',     key: 'bloom',        scale: 0.01,  val: 'val-bloom',         fmt: (v) => Math.round(v * 100) },
-    { id: 'ctl-trails',    key: 'trails',       scale: 0.01,  val: 'val-trails',        fmt: (v) => Math.round(v * 100) },
-    { id: 'ctl-aberration',key: 'aberration',   scale: 0.01,  val: 'val-aberration',    fmt: (v) => Math.round(v * 100) },
-    { id: 'ctl-vignette',  key: 'vignette',     scale: 0.01,  val: 'val-vignette',      fmt: (v) => Math.round(v * 100) },
-    { id: 'ctl-fog',       key: 'fog',          scale: 0.01,  val: 'val-fog',           fmt: (v) => Math.round(v * 100) },
+    {
+      id: 'grad-phase',
+      key: 'palettePhase',
+      scale: 0.001,
+      val: null,
+      fmt: (v) => Math.round(v * 1000)
+    },
+    {
+      id: 'grad-speed',
+      key: 'paletteSpeed',
+      scale: 0.01,
+      val: null,
+      fmt: (v) => Math.round(v * 100)
+    },
+    {
+      id: 'grad-contrast',
+      key: 'contrast',
+      scale: 0.01,
+      val: null,
+      fmt: (v) => Math.round(v * 100)
+    },
+    {
+      id: 'ctl-iterations',
+      key: 'iterations',
+      scale: 1,
+      val: 'val-iterations',
+      fmt: (v) => Math.round(v)
+    },
+    { id: 'ctl-detail', key: 'detail', scale: 0.01, val: 'val-detail', fmt: (v) => v.toFixed(1) },
+    { id: 'ctl-anim', key: 'anim', scale: 0.01, val: 'val-anim', fmt: (v) => Math.round(v * 100) },
+    {
+      id: 'ctl-bloom',
+      key: 'bloom',
+      scale: 0.01,
+      val: 'val-bloom',
+      fmt: (v) => Math.round(v * 100)
+    },
+    {
+      id: 'ctl-trails',
+      key: 'trails',
+      scale: 0.01,
+      val: 'val-trails',
+      fmt: (v) => Math.round(v * 100)
+    },
+    {
+      id: 'ctl-aberration',
+      key: 'aberration',
+      scale: 0.01,
+      val: 'val-aberration',
+      fmt: (v) => Math.round(v * 100)
+    },
+    {
+      id: 'ctl-vignette',
+      key: 'vignette',
+      scale: 0.01,
+      val: 'val-vignette',
+      fmt: (v) => Math.round(v * 100)
+    },
+    { id: 'ctl-fog', key: 'fog', scale: 0.01, val: 'val-fog', fmt: (v) => Math.round(v * 100) }
   ];
 
   function bindSlider(def) {
@@ -2415,28 +2956,45 @@ const UI = (() => {
   // ---------- Mobile drawer backdrop ----------
   // On small screens the side panels become overlay drawers. Show a backdrop
   // behind whichever panel is open so the user can tap outside to close it.
-  function isMobileDrawer() { return window.matchMedia('(max-width: 720px)').matches; }
+  function isMobileDrawer() {
+    return window.matchMedia('(max-width: 720px)').matches;
+  }
   function syncPanelBackdrop() {
     const bd = $('panel-backdrop');
     if (!bd) return;
-    if (!isMobileDrawer()) { bd.classList.remove('show'); return; }
+    if (!isMobileDrawer()) {
+      bd.classList.remove('show');
+      return;
+    }
     const anyOpen = ['panel-modes', 'panel-params'].some((id) => {
-      const p = $(id); return p && !p.classList.contains('collapsed');
+      const p = $(id);
+      return p && !p.classList.contains('collapsed');
     });
     bd.classList.toggle('show', anyOpen);
   }
 
   // ---------- Buttons ----------
   function bindButtons() {
-    const bind = (id, fn) => { const el = $(id); if (el) el.addEventListener('click', fn); };
+    const bind = (id, fn) => {
+      const el = $(id);
+      if (el) el.addEventListener('click', fn);
+    };
     bind('btn-randomize', () => actions.randomize && actions.randomize());
     bind('btn-newworld', () => actions.newWorld && actions.newWorld());
     bind('btn-share', () => actions.share && actions.share());
-    bind('btn-export', () => { openModal('modal-export'); });
-    bind('btn-gallery', () => { renderGallery(); openModal('modal-gallery'); });
+    bind('btn-export', () => {
+      openModal('modal-export');
+    });
+    bind('btn-gallery', () => {
+      renderGallery();
+      openModal('modal-gallery');
+    });
     bind('btn-save', () => openSaveModal());
     bind('btn-audio', () => actions.toggleAudio && actions.toggleAudio());
-    bind('btn-settings', () => { syncSettings(); openModal('modal-settings'); });
+    bind('btn-settings', () => {
+      syncSettings();
+      openModal('modal-settings');
+    });
     bind('btn-cycle', () => {
       const s = State.get();
       const cycling = !s.cycling;
@@ -2446,23 +3004,41 @@ const UI = (() => {
       if (btn) btn.setAttribute('aria-pressed', String(cycling));
     });
     // Panel collapse (syncs the mobile drawer backdrop).
-    bind('collapse-modes', () => { $('panel-modes').classList.toggle('collapsed'); syncPanelBackdrop(); });
-    bind('collapse-params', () => { $('panel-params').classList.toggle('collapsed'); syncPanelBackdrop(); });
-    // Mobile drawer backdrop: tap outside to close the open panel(s).
-    const pbd = $('panel-backdrop');
-    if (pbd) pbd.addEventListener('click', () => {
-      ['panel-modes', 'panel-params'].forEach((id) => { const p = $(id); if (p) p.classList.add('collapsed'); });
+    bind('collapse-modes', () => {
+      $('panel-modes').classList.toggle('collapsed');
       syncPanelBackdrop();
     });
+    bind('collapse-params', () => {
+      $('panel-params').classList.toggle('collapsed');
+      syncPanelBackdrop();
+    });
+    // Mobile drawer backdrop: tap outside to close the open panel(s).
+    const pbd = $('panel-backdrop');
+    if (pbd)
+      pbd.addEventListener('click', () => {
+        ['panel-modes', 'panel-params'].forEach((id) => {
+          const p = $(id);
+          if (p) p.classList.add('collapsed');
+        });
+        syncPanelBackdrop();
+      });
     // Onboarding.
-    bind('onboard-start', () => { hideOnboarding(); actions.onboarded && actions.onboarded(); });
-    bind('onboard-help', () => { hideOnboarding(); openModal('modal-help'); });
+    bind('onboard-start', () => {
+      hideOnboarding();
+      actions.onboarded && actions.onboarded();
+    });
+    bind('onboard-help', () => {
+      hideOnboarding();
+      openModal('modal-help');
+    });
     // Modal close buttons + backdrop.
     document.querySelectorAll('.modal-close').forEach((btn) => {
       btn.addEventListener('click', () => closeModal(btn.dataset.close));
     });
     document.querySelectorAll('.modal-backdrop').forEach((bd) => {
-      bd.addEventListener('click', (e) => { if (e.target === bd) closeModal(bd.id); });
+      bd.addEventListener('click', (e) => {
+        if (e.target === bd) closeModal(bd.id);
+      });
     });
     // Import code.
     bind('btn-import-code', () => {
@@ -2476,7 +3052,10 @@ const UI = (() => {
       if (actions.saveArtwork) actions.saveArtwork(name.trim());
     });
     // Confirm modal (used for destructive actions like delete).
-    bind('btn-confirm-cancel', () => { pendingConfirm = null; closeModal('modal-confirm'); });
+    bind('btn-confirm-cancel', () => {
+      pendingConfirm = null;
+      closeModal('modal-confirm');
+    });
     bind('btn-confirm-ok', () => {
       const fn = pendingConfirm;
       pendingConfirm = null;
@@ -2493,7 +3072,10 @@ const UI = (() => {
       input.value = (mode ? mode.label : 'Artwork') + ' #' + (Gallery.count() + 1);
     }
     openModal('modal-save');
-    if (input) { input.focus(); input.select && input.select(); }
+    if (input) {
+      input.focus();
+      input.select && input.select();
+    }
   }
 
   // Show the confirm modal; `onConfirm` runs when the user accepts.
@@ -2507,7 +3089,11 @@ const UI = (() => {
   }
 
   // ---------- Gallery ----------
-  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const esc = (s) =>
+    String(s).replace(
+      /[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+    );
 
   function renderGallery() {
     const grid = $('gallery-grid');
@@ -2528,7 +3114,9 @@ const UI = (() => {
           <button class="gc-fav" aria-pressed="${!!it.favorite}" aria-label="${it.favorite ? 'Unfavorite' : 'Favorite'} ${name}">${it.favorite ? '★' : '☆'}</button>
           <button class="gc-del" aria-label="Delete ${name}">✕</button>
         </div>`;
-      card.querySelector('.gc-restore').addEventListener('click', () => actions.galleryRestore && actions.galleryRestore(it.id));
+      card
+        .querySelector('.gc-restore')
+        .addEventListener('click', () => actions.galleryRestore && actions.galleryRestore(it.id));
       card.querySelector('.gc-fav').addEventListener('click', (e) => {
         e.stopPropagation();
         Gallery.toggleFavorite(it.id);
@@ -2553,7 +3141,10 @@ const UI = (() => {
     const title = $('mode-specific-title');
     if (!section || !body) return;
     const mode = Fractals.get(State.get().mode);
-    if (!mode) { section.hidden = true; return; }
+    if (!mode) {
+      section.hidden = true;
+      return;
+    }
 
     body.innerHTML = '';
     const addSlider = (id, label, min, max, step, value, onInput, fmt) => {
@@ -2567,7 +3158,10 @@ const UI = (() => {
       const input = document.createElement('input');
       input.type = 'range';
       input.id = id;
-      input.min = min; input.max = max; input.step = step; input.value = value;
+      input.min = min;
+      input.max = max;
+      input.step = step;
+      input.value = value;
       input.setAttribute('aria-label', label);
       row.appendChild(input);
       input.addEventListener('input', () => {
@@ -2588,7 +3182,16 @@ const UI = (() => {
 
     if (mode.shader === 'MANDELBULB') {
       title.textContent = 'Mandelbulb';
-      addSlider('ms-power', 'Power', 2, 16, 1, State.get().power, (v) => State.set({ power: v }), (v) => String(v));
+      addSlider(
+        'ms-power',
+        'Power',
+        2,
+        16,
+        1,
+        State.get().power,
+        (v) => State.set({ power: v }),
+        (v) => String(v)
+      );
       addButton('ms-reset-cam', 'Reset camera', () => {
         Camera.setAngle(0);
         Camera.setOrbitRadius(3.0);
@@ -2596,10 +3199,28 @@ const UI = (() => {
       });
     } else if (mode.kind === 'lsystem') {
       title.textContent = mode.label;
-      addSlider('ms-growth', 'Growth', 0, 100, 1, Math.round((State.get().growth || 1) * 100), (v) => State.set({ growth: v / 100 }), (v) => v + '%');
+      addSlider(
+        'ms-growth',
+        'Growth',
+        0,
+        100,
+        1,
+        Math.round((State.get().growth || 1) * 100),
+        (v) => State.set({ growth: v / 100 }),
+        (v) => v + '%'
+      );
     } else if (mode.shader === 'JULIA') {
       title.textContent = 'Julia Set';
-      addSlider('ms-julia', 'Drift', 0, 1000, 1, Math.round((State.get().juliaPhase || 0) * 1000), (v) => State.set({ juliaPhase: v / 1000 }), (v) => (v / 1000).toFixed(3));
+      addSlider(
+        'ms-julia',
+        'Drift',
+        0,
+        1000,
+        1,
+        Math.round((State.get().juliaPhase || 0) * 1000),
+        (v) => State.set({ juliaPhase: v / 1000 }),
+        (v) => (v / 1000).toFixed(3)
+      );
     } else {
       section.hidden = true;
       return;
@@ -2629,7 +3250,10 @@ const UI = (() => {
   // ---------- Settings ----------
   function syncSettings() {
     const s = A11y.get();
-    const set = (id, v) => { const el = $(id); if (el) el.checked = !!v; };
+    const set = (id, v) => {
+      const el = $(id);
+      if (el) el.checked = !!v;
+    };
     set('set-reduced-motion', s.reducedMotion);
     set('set-high-contrast', s.highContrast);
     set('set-adaptive', s.adaptive);
@@ -2650,14 +3274,15 @@ const UI = (() => {
     bind('set-adaptive', 'adaptive');
     bind('set-keyboard', 'keyboard');
     const resetBtn = $('btn-reset');
-    if (resetBtn) resetBtn.addEventListener('click', () => {
-      if (window.confirm('Reset all settings and clear the gallery?')) {
-        A11y.reset();
-        Gallery.clear();
-        syncSettings();
-        toast('Settings reset', 'ok');
-      }
-    });
+    if (resetBtn)
+      resetBtn.addEventListener('click', () => {
+        if (window.confirm('Reset all settings and clear the gallery?')) {
+          A11y.reset();
+          Gallery.clear();
+          syncSettings();
+          toast('Settings reset', 'ok');
+        }
+      });
   }
 
   // ---------- Init ----------
@@ -2676,8 +3301,10 @@ const UI = (() => {
     updateStatus();
     // On small screens start with both panels collapsed so the artwork is visible.
     if (isMobileDrawer()) {
-      const pm = $('panel-modes'); if (pm) pm.classList.add('collapsed');
-      const pp = $('panel-params'); if (pp) pp.classList.add('collapsed');
+      const pm = $('panel-modes');
+      if (pm) pm.classList.add('collapsed');
+      const pp = $('panel-params');
+      if (pp) pp.classList.add('collapsed');
     }
     syncPanelBackdrop();
     // Keep the drawer backdrop in sync when crossing the mobile breakpoint.
@@ -2685,15 +3312,33 @@ const UI = (() => {
     // Show onboarding only on first visit.
     try {
       $('onboarding').hidden = !!localStorage.getItem('fractal-forge:onboarded');
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      /* ignore */
+    }
   }
 
   return {
-    toast, openModal, closeModal, closeAllModals, openSaveModal, openConfirm, isAnyModalOpen,
-    updateStatus, updateZoomStatus, updateFps,
-    populateModes, highlightMode, populatePalettes, highlightPalette, updateGradientBar,
-    renderGallery, setExportProgress, syncSliders, syncSettings, renderModeSpecific,
-    init,
+    toast,
+    openModal,
+    closeModal,
+    closeAllModals,
+    openSaveModal,
+    openConfirm,
+    isAnyModalOpen,
+    updateStatus,
+    updateZoomStatus,
+    updateFps,
+    populateModes,
+    highlightMode,
+    populatePalettes,
+    highlightPalette,
+    updateGradientBar,
+    renderGallery,
+    setExportProgress,
+    syncSliders,
+    syncSettings,
+    renderModeSpecific,
+    init
   };
 })();
 
@@ -2708,8 +3353,9 @@ const App = (() => {
   let time = 0;
   let fpsSmooth = 60;
   let renderScale = 1.0;
-  let renderW = 0, renderH = 0;
-  let audioBands = [0, 0, 0];   // [bass, mid, treble]
+  let renderW = 0,
+    renderH = 0;
+  let audioBands = [0, 0, 0]; // [bass, mid, treble]
 
   const $ = (id) => document.getElementById(id);
 
@@ -2717,13 +3363,14 @@ const App = (() => {
   function computeRenderSize() {
     return {
       w: Math.max(2, Math.floor(window.innerWidth * renderScale)),
-      h: Math.max(2, Math.floor(window.innerHeight * renderScale)),
+      h: Math.max(2, Math.floor(window.innerHeight * renderScale))
     };
   }
 
   function rebuildBuffers() {
     const { w, h } = computeRenderSize();
-    renderW = w; renderH = h;
+    renderW = w;
+    renderH = h;
     GL.resize(w, h);
     if (baseFBO) GL.deleteFBO(baseFBO);
     baseFBO = GL.createFBO(w, h);
@@ -2750,7 +3397,7 @@ const App = (() => {
       center: [Camera.center.x, Camera.center.y],
       zoom: Camera.zoom,
       camAngle: Camera.getAngle(),
-      orbitRadius: Camera.getOrbitRadius(),
+      orbitRadius: Camera.getOrbitRadius()
     });
     UI.updateZoomStatus();
   }
@@ -2763,7 +3410,7 @@ const App = (() => {
     State.set({
       mode: id,
       center: [m.center[0], m.center[1]],
-      zoom: (window.innerHeight || 800) / m.span,
+      zoom: (window.innerHeight || 800) / m.span
     });
     if (m.iterations) State.set({ iterations: m.iterations });
     if (m.power) State.set({ power: m.power });
@@ -2815,7 +3462,14 @@ const App = (() => {
     if (result.ok) {
       UI.closeModal('modal-save');
       if (result.trimmed > 0) {
-        UI.toast('Saved (storage full — removed ' + result.trimmed + ' oldest non-favorite' + (result.trimmed > 1 ? 's' : '') + ')', 'info');
+        UI.toast(
+          'Saved (storage full — removed ' +
+            result.trimmed +
+            ' oldest non-favorite' +
+            (result.trimmed > 1 ? 's' : '') +
+            ')',
+          'info'
+        );
       } else {
         UI.toast('Artwork saved to gallery', 'ok');
       }
@@ -2831,10 +3485,12 @@ const App = (() => {
       if (btn) btn.setAttribute('aria-pressed', 'false');
       UI.toast('Audio reactive off', 'info');
     } else {
-      Audio.enable().then(() => {
-        if (btn) btn.setAttribute('aria-pressed', 'true');
-        UI.toast('Audio reactive on — make some noise', 'ok');
-      }).catch((e) => UI.toast('Mic unavailable: ' + e.message, 'error'));
+      Audio.enable()
+        .then(() => {
+          if (btn) btn.setAttribute('aria-pressed', 'true');
+          UI.toast('Audio reactive on — make some noise', 'ok');
+        })
+        .catch((e) => UI.toast('Mic unavailable: ' + e.message, 'error'));
     }
   }
 
@@ -2895,10 +3551,12 @@ const App = (() => {
     if (exporting) return; // busy lock: one export at a time
     let w, h;
     if (res === 'current') {
-      w = window.innerWidth; h = window.innerHeight;
+      w = window.innerWidth;
+      h = window.innerHeight;
     } else {
       const parts = res.split('x').map(Number);
-      w = parts[0]; h = parts[1];
+      w = parts[0];
+      h = parts[1];
     }
     if (!Number.isFinite(w) || !Number.isFinite(h) || w < 16 || h < 16) {
       UI.toast('Invalid export size', 'error');
@@ -2946,17 +3604,41 @@ const App = (() => {
 
   function handleAction(action, arg) {
     switch (action) {
-      case 'pan': Camera.pan(arg[0], arg[1]); syncCamera(); break;
-      case 'zoom': Camera.zoomCenter(arg[0]); syncCamera(); break;
-      case 'pause': togglePause(); break;
-      case 'randomize': randomize(); break;
-      case 'newworld': newWorld(); break;
-      case 'share': share(); break;
-      case 'export': UI.openModal('modal-export'); break;
-      case 'gallery': UI.renderGallery(); UI.openModal('modal-gallery'); break;
-      case 'audio': toggleAudio(); break;
-      case 'palette': setPalette(arg[0]); break;
-      default: break;
+      case 'pan':
+        Camera.pan(arg[0], arg[1]);
+        syncCamera();
+        break;
+      case 'zoom':
+        Camera.zoomCenter(arg[0]);
+        syncCamera();
+        break;
+      case 'pause':
+        togglePause();
+        break;
+      case 'randomize':
+        randomize();
+        break;
+      case 'newworld':
+        newWorld();
+        break;
+      case 'share':
+        share();
+        break;
+      case 'export':
+        UI.openModal('modal-export');
+        break;
+      case 'gallery':
+        UI.renderGallery();
+        UI.openModal('modal-gallery');
+        break;
+      case 'audio':
+        toggleAudio();
+        break;
+      case 'palette':
+        setPalette(arg[0]);
+        break;
+      default:
+        break;
     }
   }
 
@@ -2977,7 +3659,10 @@ const App = (() => {
     const inst = 1 / Math.max(dt, 0.001);
     fpsSmooth = fpsSmooth * 0.9 + inst * 0.1;
     if (!a11y.adaptive) {
-      if (qualityIndex !== 0) { qualityIndex = 0; setRenderScale(QUALITY_LEVELS[0]); }
+      if (qualityIndex !== 0) {
+        qualityIndex = 0;
+        setRenderScale(QUALITY_LEVELS[0]);
+      }
       return;
     }
     // Cooldown prevents thrashing (rebuilding buffers on adjacent frames).
@@ -3046,7 +3731,7 @@ const App = (() => {
       audio: audioBands,
       highContrast: a11y.highContrast ? 1 : 0,
       camPos: Camera.camPos,
-      camTarget: Camera.camTarget,
+      camTarget: Camera.camTarget
     };
 
     Engine.renderFractal(baseFBO, renderW, renderH, params);
@@ -3070,7 +3755,7 @@ const App = (() => {
         Engine.resetPrograms();
         rebuildBuffers();
         UI.toast('Graphics context restored', 'ok');
-      },
+      }
     });
     A11y.load();
     applySettings();
@@ -3106,17 +3791,30 @@ const App = (() => {
         }
         syncCamera();
       },
-      onAction: handleAction,
+      onAction: handleAction
     });
 
     Ambient.init($('ambient-canvas'));
 
     UI.init({
-      setMode, randomize, newWorld, share, toggleAudio, saveArtwork,
-      galleryRestore, importCode, exportAt,
+      setMode,
+      randomize,
+      newWorld,
+      share,
+      toggleAudio,
+      saveArtwork,
+      galleryRestore,
+      importCode,
+      exportAt,
       onParam: () => {},
       onSetting,
-      onboarded: () => { try { localStorage.setItem('fractal-forge:onboarded', '1'); } catch (e) { /* ignore */ } },
+      onboarded: () => {
+        try {
+          localStorage.setItem('fractal-forge:onboarded', '1');
+        } catch (e) {
+          /* ignore */
+        }
+      }
     });
     UI.renderModeSpecific();
 
@@ -3126,11 +3824,23 @@ const App = (() => {
 
   // Expose the live animation time so the export/thumbnail path can render
   // the exact on-screen composition instead of forcing time = 0.
-  function getLiveTime() { return time; }
+  function getLiveTime() {
+    return time;
+  }
 
   return {
-    init, setMode, randomize, newWorld, share, toggleAudio, saveArtwork,
-    galleryRestore, importCode, exportAt, togglePause, getLiveTime,
+    init,
+    setMode,
+    randomize,
+    newWorld,
+    share,
+    toggleAudio,
+    saveArtwork,
+    galleryRestore,
+    importCode,
+    exportAt,
+    togglePause,
+    getLiveTime
   };
 })();
 
@@ -3143,10 +3853,13 @@ function boot() {
   } catch (e) {
     console.error('FRACTAL FORGE failed to start:', e);
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;' +
+    overlay.style.cssText =
+      'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;' +
       'color:#e5e7eb;font-family:system-ui,sans-serif;padding:2rem;text-align:center;background:#05060a';
-    overlay.innerHTML = '<div><h2 style="margin:0 0 .5rem">FRACTAL FORGE could not start</h2>' +
-      '<p style="margin:0;opacity:.8">' + (e && e.message ? e.message : 'Unknown error') +
+    overlay.innerHTML =
+      '<div><h2 style="margin:0 0 .5rem">FRACTAL FORGE could not start</h2>' +
+      '<p style="margin:0;opacity:.8">' +
+      (e && e.message ? e.message : 'Unknown error') +
       '. WebGL may be unavailable or blocked in this browser.</p></div>';
     document.body.appendChild(overlay);
   }
