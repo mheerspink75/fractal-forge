@@ -11,6 +11,11 @@
      D10 — Action keys (r/n/s/e/g/a, 1-9) are inert behind an open modal,
            while pan/zoom/space (pause) still work.
 
+   Plus a framing guard:
+     IN  — Every GPU mode renders a valid (non-flat) frame at two fresh seed
+           values, so a per-seed transform that pushes the subject out of
+           frame is caught in every mode, not just the Mandelbulb.
+
    A lightweight boot/render check runs first on every target (WebGL present,
    app initialized, a non-blank frame).
 
@@ -287,6 +292,28 @@ async function runTarget(name, url, evidenceBase) {
         isValidFrame(decode(A)) && isValidFrame(decode(B)),
         'A ' + JSON.stringify(aStat) + '  B ' + JSON.stringify(bStat)
       );
+    }
+    // ---------- In-frame: every GPU mode renders a valid frame at 2 fresh seeds ----------
+    // D3 proves the seed drives each mode at two *adjacent* seeds (boot seed +
+    // k*SEED_STEP). This proves the subject stays in frame at two *fresh* seed
+    // values, so a per-mode transform that breaks framing at particular seeds
+    // (camera/offset math) is caught in every mode, not just the Mandelbulb.
+    console.log('\n-- In-frame: all GPU modes render at 2 fresh seeds --');
+    const IN_FRAME_SEEDS = [1, 1597334671]; // distinct from the D3 seed sequence
+    for (const id of GPU_MODES) {
+      const settle = id === 'mandelbulb' ? 2500 : 900;
+      for (const seed of IN_FRAME_SEEDS) {
+        await page.evaluate((mid) => App.setMode(mid), id);
+        await page.evaluate((s) => State.set({ seed: s >>> 0 }), seed);
+        await page.waitForTimeout(settle);
+        const frame = await capture(page, evidenceDir, 'inframe-' + id + '-' + seed);
+        const s2 = frameStats(decode(frame));
+        ok(
+          'In-frame ' + id + ' @ seed ' + seed + ': renders a valid frame',
+          isValidFrame(decode(frame)),
+          JSON.stringify(s2)
+        );
+      }
     }
     await page.evaluate(() => App.togglePause()); // resume for D4
 
