@@ -208,6 +208,9 @@ async function runTarget(name, url, evidenceBase) {
     ok('D10: settings modal is open (key gate active)', openState.anyOpen === true, 'isAnyModalOpen=' + openState.anyOpen);
 
     const before = await page.evaluate(() => ({ mode: State.get().mode, seed: State.get().seed, palette: State.get().palette, audio: document.getElementById('btn-audio').getAttribute('aria-pressed') }));
+    // Clear toasts left over from the D4 phase (transient UI, 2.6s lifetime) so
+    // the "no action fired" check below only sees toasts these keypresses make.
+    await page.evaluate(() => { const s = document.getElementById('toast-stack'); if (s) s.innerHTML = ''; });
     for (const k of ACTION_KEYS) { await page.keyboard.press(k); await page.waitForTimeout(70); }
     await page.waitForTimeout(200);
     const after = await page.evaluate(() => ({
