@@ -49,11 +49,12 @@ export const State = (() => {
   }
 
   // ---------- Shareable URL (link a world) ----------
-  // The four fields carried in the URL, with bounds mirroring Share's
+  // The five fields carried in the URL, with bounds mirroring Share's
   // NUMERIC ranges so a URL can never smuggle an out-of-range uniform.
   const URL_FIELDS = [
     { key: 'mode', param: 'fractal', type: 'mode' },
     { key: 'seed', param: 'seed', type: 'int', range: [0, 1e9] },
+    { key: 'palette', param: 'palette', type: 'int', range: [0, 8] },
     { key: 'anim', param: 'time', type: 'num', range: [0, 1] },
     { key: 'iterations', param: 'iterations', type: 'int', range: [16, 4096] }
   ];
