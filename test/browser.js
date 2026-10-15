@@ -56,6 +56,10 @@ const ACTION_KEYS = ['r', 'n', 's', 'e', 'g', 'a', '1', '2', '3', '4', '5', '6',
 const VIEWPORT = { width: 1280, height: 720 };
 const GRID = 64; // downsample size for pixel comparisons
 const MATCH_CAP = 45; // screen-vs-export MAE must stay below this
+const GOLDEN_QUERY = '?fractal=mandelbrot&seed=424242&palette=2&time=0&iterations=512';
+// Golden-image cap (64x64 MAE): fresh-launch jitter measures ~0.2-0.5 while any real
+// regression (wrong fractal/palette/seed/effects) moves the scene by >= 2.5.
+const GOLDEN_MAE_CAP = 2.0; // committed-baseline MAE must stay below this
 // A broken seed (mode ignores u_seed) yields near-identical frames: measured jitter
 // is ~0.2 while a working seed change moves composition by >= 2.5 (64x64 downsample).
 const SEED_MAE_FLOOR = 1.5; // seed-driven MAE must stay above this
@@ -570,6 +574,36 @@ async function runTarget(name, url, evidenceBase) {
       urlAfter.indexOf('fractal=') >= 0 && urlAfter.indexOf('seed=' + randSeed) >= 0,
       urlAfter
     );
+
+    // ---------- Golden image: pixel regression against the committed baseline ----------
+    console.log('\n-- Golden image: pixel regression --');
+    {
+      // A cold context's first frames differ from settled frames (shader warmup);
+      // burn one page off before the comparison so both sides are settled.
+      const warmPage = await context.newPage();
+      await warmPage.goto(url + GOLDEN_QUERY, { waitUntil: 'load' });
+      await warmPage.waitForTimeout(1200);
+      await warmPage.close();
+      const gPage = await context.newPage();
+      await gPage.goto(url + GOLDEN_QUERY, { waitUntil: 'load' });
+      await gPage.waitForTimeout(1200);
+      const live = await capture(gPage, evidenceDir, 'golden-live');
+      await gPage.close();
+      const golden = JSON.parse(
+        fs.readFileSync(path.join(__dirname, 'golden', 'mandelbrot-424242.json'), 'utf8')
+      );
+      const gMAE = mae(downsample(decode(live), GRID), new Float32Array(golden.values));
+      ok(
+        'Golden: canonical scene matches the committed baseline',
+        gMAE < GOLDEN_MAE_CAP,
+        '64x64 MAE=' + gMAE.toFixed(3) + ' (cap ' + GOLDEN_MAE_CAP + ')'
+      );
+      ok(
+        'Golden: canonical scene renders a valid frame',
+        isValidFrame(decode(live)),
+        JSON.stringify(frameStats(decode(live)))
+      );
+    }
 
     // Any real JS error raised during the run is itself a failure.
     const realErrors = errors.filter((e) => !/favicon/i.test(e));
