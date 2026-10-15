@@ -510,18 +510,25 @@ async function runTarget(name, url, evidenceBase) {
 
     // ---------- Share URL: a world is linkable; junk falls back safely ----------
     console.log('\n-- Share URL: linkable worlds + safe fallback --');
-    await page.goto(url + '?fractal=sierpinski&seed=424242&time=0&iterations=128', {
+    await page.goto(url + '?fractal=sierpinski&seed=424242&palette=5&time=0&iterations=128', {
       waitUntil: 'load'
     });
     await page.waitForTimeout(900); // first frames settle (sierpinski is light)
     const restoredState = await page.evaluate(() => {
       const s = State.get();
-      return { mode: s.mode, seed: s.seed, anim: s.anim, iterations: s.iterations };
+      return {
+        mode: s.mode,
+        seed: s.seed,
+        palette: s.palette,
+        anim: s.anim,
+        iterations: s.iterations
+      };
     });
     ok(
-      'Share URL: valid link restores mode + seed + time + iterations',
+      'Share URL: valid link restores mode + seed + palette + time + iterations',
       restoredState.mode === 'sierpinski' &&
         restoredState.seed === 424242 &&
+        restoredState.palette === 5 &&
         restoredState.anim === 0 &&
         restoredState.iterations === 128,
       JSON.stringify(restoredState)
@@ -533,15 +540,16 @@ async function runTarget(name, url, evidenceBase) {
       JSON.stringify(frameStats(decode(sharedFrame)))
     );
 
-    await page.goto(url + '?fractal=bogus&seed=abc&time=zzz', { waitUntil: 'load' });
+    await page.goto(url + '?fractal=bogus&seed=abc&palette=zzz&time=zzz', { waitUntil: 'load' });
     await page.waitForTimeout(900);
     const junkState = await page.evaluate(() => ({
       mode: State.get().mode,
-      seed: State.get().seed
+      seed: State.get().seed,
+      palette: State.get().palette
     }));
     ok(
       'Share URL: junk link falls back to defaults (no NaN, no crash)',
-      junkState.mode === 'mandelbrot' && junkState.seed === 12345,
+      junkState.mode === 'mandelbrot' && junkState.seed === 12345 && junkState.palette === 0,
       JSON.stringify(junkState)
     );
     const junkFrame = await capture(page, evidenceDir, 'share-url-junk');

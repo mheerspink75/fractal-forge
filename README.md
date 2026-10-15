@@ -66,8 +66,8 @@ exact artwork (mode, palette, seed, camera, effects) is reproduced on any machin
 
 #### Shareable URLs
 Any world is also **linkable**: the address bar mirrors the shareable state as
-`?fractal=<mode>&seed=<n>&time=<0–1>&iterations=<n>` (updated via `history.replaceState`, so the
-back/forward stack stays clean). Opening such a link restores that fractal, seed, animation speed,
+`?fractal=<mode>&seed=<n>&palette=<0–8>&time=<0–1>&iterations=<n>` (updated via `history.replaceState`, so the
+back/forward stack stays clean). Opening such a link restores that fractal, seed, palette, animation speed,
 and iteration count before the first render. Invalid or out-of-range values are dropped or clamped,
 so a junk link always renders a valid default world instead of breaking.
 

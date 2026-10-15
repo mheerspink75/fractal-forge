@@ -376,27 +376,32 @@ console.log('--- Share (boundary validation and clamping) ---');
 
 console.log('--- State + URL (Phase 4: shareable links) ---');
 {
-  // Round-trip: state -> query -> parse -> same four fields.
-  M.State.set({ mode: 'julia', seed: 424242, anim: 0.35, iterations: 512 });
+  // Round-trip: state -> query -> parse -> same five fields.
+  M.State.set({ mode: 'julia', seed: 424242, palette: 3, anim: 0.35, iterations: 512 });
   const q = M.State.toQuery(M.State.get());
-  check('query carries the 4 params', /fractal=julia&seed=424242&time=0\.35&iterations=512/.test(q));
+  check('query carries the 5 params', /fractal=julia&seed=424242&palette=3&time=0\.35&iterations=512/.test(q));
   const rt = M.State.parseURL(q);
   check('round-trip: changed flag', rt.changed === true);
   check('round-trip: mode', rt.partial.mode === 'julia');
   check('round-trip: seed', rt.partial.seed === 424242);
+  check('round-trip: palette', rt.partial.palette === 3);
   check('round-trip: anim (time)', Math.abs(rt.partial.anim - 0.35) < 1e-9);
   check('round-trip: iterations', rt.partial.iterations === 512);
 
   // Malformed or out-of-range values fall back safely (dropped or clamped).
-  const bad = M.State.parseURL('?fractal=bogus&seed=abc&time=xyz&iterations=99999');
+  const bad = M.State.parseURL('?fractal=bogus&seed=abc&palette=xyz&time=xyz&iterations=99999');
   check('unknown fractal dropped', bad.partial.mode === undefined);
   check('non-numeric seed dropped', bad.partial.seed === undefined);
+  check('non-numeric palette dropped', bad.partial.palette === undefined);
   check('non-numeric time dropped', bad.partial.anim === undefined);
   check('iterations clamped to 4096', bad.partial.iterations === 4096);
-  const lo = M.State.parseURL('?seed=-5&time=7&iterations=1');
+  const lo = M.State.parseURL('?seed=-5&palette=-3&time=7&iterations=1');
   check('seed clamped to 0', lo.partial.seed === 0);
+  check('palette clamped to 0', lo.partial.palette === 0);
   check('time clamped to 1', lo.partial.anim === 1);
   check('iterations clamped to 16', lo.partial.iterations === 16);
+  const hi = M.State.parseURL('?palette=999');
+  check('palette clamped to 8', hi.partial.palette === 8);
   // Unknown-only params and missing search -> no change at all.
   const unk = M.State.parseURL('?foo=bar&baz=1');
   check('unknown params -> no change', unk.changed === false && Object.keys(unk.partial).length === 0);

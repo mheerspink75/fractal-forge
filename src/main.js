@@ -1650,6 +1650,7 @@ const App = (() => {
     State.set({ palette: i });
     UI.highlightPalette(i);
     UI.updateGradientBar();
+    syncUrl();
   }
 
   function share() {
