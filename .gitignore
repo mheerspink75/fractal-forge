@@ -21,3 +21,9 @@ session/
 
 # Node (if any tooling is added later)
 node_modules/
+
+# Prompts
+prompts/
+
+# Browser-check evidence (screenshots + exported PNGs)
+test/.evidence/
