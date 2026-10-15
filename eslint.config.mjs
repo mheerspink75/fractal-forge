@@ -7,8 +7,8 @@ const noUnused = ['error', { vars: 'all', args: 'none', caughtErrors: 'none' }];
 export default [
   { ignores: ['node_modules/**', 'test/.evidence/**', 'prompts/**', 'session/**'] },
   {
-    // The app: browser ES modules (script.js + src/*.js).
-    files: ['script.js', 'src/**/*.js'],
+    // The app: browser ES modules under src/ (entry: src/main.js).
+    files: ['src/**/*.js'],
     languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: { ...globals.browser } },
     rules: { ...js.configs.recommended.rules, 'no-unused-vars': noUnused }
   },

@@ -1,50 +1,39 @@
 # FRACTAL FORGE — Architecture
 
-A map for contributors working in `script.js` (the ~3.9k-line monolith) and the test harness.
+A map for contributors working in the app's modules (entry `src/main.js` plus its sibling
+files under `src/`) and the test harness.
 The README's **Architecture** section covers *what* each module does; this document covers *where*
 things live, *which invariants the tests protect*, and *how to run and ship changes safely*.
 
-> Line numbers below are as of the `master` at the time of writing and are **approximate — they
-> will drift** after any edit. Grep the symbol, not the line number.
-
 ## Overview
 
-FRACTAL FORGE is a zero-build static WebGL installation: `index.html` + `styles.css` + one plain
-browser script (`script.js`) loaded directly by the page — no bundler, no framework, no runtime
-dependencies. A frame is produced by: `State` (single source of truth) → `Fractals` registry
-(picks the mode/params) → `Engine.renderFractal` (binds uniforms, runs the mode's fragment
-shader) → `Effects` post pipeline (bright pass → blur → composite → feedback trails) → the `App`
-main loop (`requestAnimationFrame`) that drives time, adaptive quality, and camera.
+FRACTAL FORGE is a zero-build static WebGL installation: `index.html` + `styles.css` + a set of
+native ES modules loaded directly by the page (entry `src/main.js`, plus 7 sibling files under
+`src/`) — no bundler, no framework, no runtime dependencies. A frame is produced by: `State`
+(single source of truth) → `Fractals` registry (picks the mode/params) → `Engine.renderFractal`
+(binds uniforms, runs the mode's fragment shader) → `Effects` post pipeline (bright pass → blur →
+composite → feedback trails) → the `App` main loop (`requestAnimationFrame`) that drives time,
+adaptive quality, and camera.
 
-## Region map of `script.js`
+## Module files
 
-The file is a sequence of IIFE modules in dependency order. Section boundaries (header comment
-lines) at the time of writing:
+Each module is an IIFE exposing a small public API (`export const Name = (() => {...})();`),
+imported by `main.js` (or by `exporter.js` / `ui.js` where a dependency points the other way —
+those circular imports are safe because every cross-reference happens at call time).
 
-| Lines (approx.) | Region | Notes |
+| File | Line count (approx.) | Modules |
 |---|---|---|
-| 1 | file header | module inventory |
-| 30 | `Util` | PRNG (mulberry32 / sfc32), math, base64url, packing |
-| 126 | `GL` | WebGL context, shader/program compilation, FBOs, fullscreen quad |
-| 370 | `Shaders` | All GLSL: `COMMON` chunk + 10 fractal fragment shaders + 5 post passes |
-| 911 | `ColorSystem` | 9 IQ cosine palettes, gradient editor, animated cycling |
-| 1071 | `Fractals` | mode registry (14 modes: 10 GPU + 4 L-system) with per-mode params |
-| 1234 | `Engine` | `setMode` (~1282), **`renderFractal` (~1313)** — uniform binding + draw |
-| 1380 | `LSystem` | string-rewriting fractals on a 2D canvas |
-| 1507 | `Effects` | post pipeline (bright → blur H/V → composite → feedback trails) |
-| 1622 | `Camera` | pan/zoom/deep-zoom; **3D orbit for Mandelbulb** |
-| 1735 | `Interaction` | mouse / touch / keyboard input, D10 key gating lives here + in `App` |
-| 1926 | `State` | single source of truth for render params |
-| 1976 | `Procedural` | seed, randomize, mutations, parameter blending |
-| 2033 | `Share` | `FF-` code serialize/deserialize |
-| 2158 | `Exporter` | offscreen FBO render at **live** animation time (D4) |
-| 2244 | `Gallery` | saved worlds + thumbnails in `localStorage` |
-| 2375 | `Audio` | mic-reactive frequency analysis (intentionally shadows the built-in `Audio`) |
-| 2462 | `Ambient` | drifting particle field (2D canvas) |
-| 2551 | `A11y` | reduced motion, contrast, adaptive quality settings |
-| 2602 | `UI` | DOM bindings: panels, sliders, buttons, toasts, modals (focus trap) |
-| 3345 | `App` | orchestrator: init, **main loop `loop` (~3684)**, `exportAt` (~3550), adaptive quality |
-| 3847 | Boot | `App.init()` + graceful WebGL-missing fallback |
+| `src/main.js` | ~1.9k | `GL`, `ColorSystem`, `Engine` (with **`renderFractal`** — uniform binding + draw), `LSystem`, `Effects` (post pipeline: bright → blur H/V → composite → feedback trails), `Interaction` (mouse/touch/keyboard, D10 key gating lives here + in `App`), `Procedural`, `Share`, `Gallery`, `Audio`, `Ambient`, `A11y`, `App` (orchestrator: init, **main loop**, `exportAt`, adaptive quality), and `boot()` |
+| `src/ui.js` | ~710 | `UI` — DOM bindings: panels, sliders, buttons, toasts, modals (focus trap) |
+| `src/shaders.js` | ~500 | `Shaders` — all GLSL: `COMMON` chunk + 10 fractal fragment shaders + 5 post passes |
+| `src/fractals.js` | ~160 | `Fractals` — mode registry (14 modes: 10 GPU + 4 L-system) with per-mode params |
+| `src/camera.js` | ~105 | `Camera` — pan/zoom/deep-zoom; **3D orbit for Mandelbulb** |
+| `src/util.js` | ~90 | `Util` — PRNG (mulberry32 / sfc32), math, base64url, packing |
+| `src/exporter.js` | ~80 | `Exporter` — offscreen FBO render at **live** animation time (D4) |
+| `src/state.js` | ~45 | `State` — single source of truth for render params |
+
+> Line counts are as of the `master` at the time of writing and **will drift** after any edit.
+> Grep the symbol, not the line number.
 
 `index.html` hosts the panels/modals/onboarding markup; `styles.css` the glassmorphic theme.
 
@@ -80,8 +69,8 @@ SKIP_LIVE=1 npm run test:browser   # local target only (what CI runs)
 BASE_URL=<url> npm run test:browser # a single custom target
 ```
 
-- `npm test` loads `script.js` in a `vm` sandbox with mocked DOM/WebGL — it verifies logic and
-  module APIs, **not pixels**.
+- `npm test` loads the module graph (entry `src/main.js`, via `test/load-app-source.js`) in a
+  `vm` sandbox with mocked DOM/WebGL — it verifies logic and module APIs, **not pixels**.
 - The browser suite runs real headless Chromium with SwiftShader WebGL; it verifies boot/render,
   D3, the in-frame guard, D4, and D10. Evidence (screenshots + exported PNGs) lands in
   `test/.evidence/<target>/`. Headless WebGL is slow: the Mandelbulb raymarch needs a 2500 ms
