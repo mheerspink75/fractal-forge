@@ -1810,6 +1810,9 @@ const App = (() => {
   function importCode(code) {
     try {
       Share.apply(code);
+      // Share codes carry the world, not a moment: clear any paused clock so
+      // the URL never keeps a stale moment after an import.
+      State.set({ clock: 0 });
       applyWorld();
       UI.closeModal('modal-gallery');
       UI.toast('World imported', 'ok');
@@ -1872,6 +1875,10 @@ const App = (() => {
 
   function togglePause() {
     paused = !paused;
+    // The paused moment is the reproducible one: pin the clock into the URL
+    // on pause (written once here, never per-frame) and drop it on resume.
+    State.set({ clock: paused ? time : 0 });
+    syncUrl();
     UI.toast(paused ? 'Paused' : 'Resumed', 'info');
   }
 
@@ -2022,6 +2029,10 @@ const App = (() => {
     // values are dropped (defaults stay); a valid value always wins.
     const restored = State.parseURL(window.location && window.location.search);
     if (restored.changed) State.set(restored.partial);
+    // A shared clock is a paused moment: seed the main-loop clock from it so
+    // the link reproduces that exact frame (the app still animates forward
+    // from there unless paused or reduced-motion).
+    time = Math.max(0, Number(State.get().clock) || 0);
 
     const canvas = $('gl-canvas');
     GL.init(canvas);

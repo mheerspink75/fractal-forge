@@ -402,6 +402,23 @@ console.log('--- State + URL (Phase 4: shareable links) ---');
   check('iterations clamped to 16', lo.partial.iterations === 16);
   const hi = M.State.parseURL('?palette=999');
   check('palette clamped to 8', hi.partial.palette === 8);
+
+  // Clock (paused moment): round-trips; junk/negative dropped; omitted at 0.
+  M.State.set({ mode: 'julia', seed: 123, anim: 1, clock: 3.5 });
+  const qc = M.State.toQuery(M.State.get());
+  check('query carries clock=3.5', qc.indexOf('clock=3.5') >= 0, qc);
+  const rtc = M.State.parseURL(qc);
+  check('round-trip keeps clock=3.5', rtc.partial.clock === 3.5);
+  M.State.reset();
+  const q0 = M.State.toQuery(M.State.get());
+  check('query omits clock while 0 (default state)', q0.indexOf('clock=') === -1, q0);
+  const junkc = M.State.parseURL('?fractal=julia&seed=123&anim=1&clock=abc');
+  check('junk clock dropped', junkc.partial.clock === undefined, JSON.stringify(junkc.partial));
+  const negc = M.State.parseURL('?clock=-1');
+  check('negative clock clamped to 0', negc.partial.clock === 0);
+  const bigc = M.State.parseURL('?clock=99999');
+  check('clock clamped to 3600', bigc.partial.clock === 3600);
+
   // Unknown-only params and missing search -> no change at all.
   const unk = M.State.parseURL('?foo=bar&baz=1');
   check('unknown params -> no change', unk.changed === false && Object.keys(unk.partial).length === 0);
