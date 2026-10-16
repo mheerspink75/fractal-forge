@@ -575,6 +575,105 @@ async function runTarget(name, url, evidenceBase) {
       urlAfter
     );
 
+    // ---------- Auto-grow: L-system modes grow into being on (re)select ----------
+    console.log('\n-- Auto-grow: L-system growth animates on select --');
+    // First select: growth must end at exactly 1 (ease-out animator completes).
+    await page.evaluate(() => App.setMode('tree'));
+    const grewEnd = await page
+      .waitForFunction(() => State.get().growth >= 1, { timeout: 10000 })
+      .then(() => true)
+      .catch(() => false);
+    ok('Auto-grow: tree reaches full growth after selection', grewEnd);
+    await page.waitForTimeout(900); // settle under SwiftShader
+    const endFrame = await capture(page, evidenceDir, 'autogrow-tree-end');
+    ok(
+      'Auto-grow: tree end-state renders a valid frame',
+      isValidFrame(decode(endFrame)),
+      JSON.stringify(frameStats(decode(endFrame)))
+    );
+
+    // Re-select: a mid-animation frame must exist and differ from the end frame.
+    await page.evaluate(() => App.setMode('tree'));
+    const caughtMid = await page
+      .waitForFunction(() => {
+        const g = State.get().growth;
+        return g > 0.4 && g < 0.95;
+      }, { timeout: 8000 })
+      .then(() => true)
+      .catch(() => false);
+    if (caughtMid) {
+      await page.waitForTimeout(300); // let a frame render at mid growth
+      const midFrame = await capture(page, evidenceDir, 'autogrow-tree-mid');
+      const midDone = await page
+        .waitForFunction(() => State.get().growth >= 1, { timeout: 10000 })
+        .then(() => true)
+        .catch(() => false);
+      ok('Auto-grow: re-select reaches full growth', midDone);
+      await page.waitForTimeout(900);
+      const endFrame2 = await capture(page, evidenceDir, 'autogrow-tree-end2');
+      const midMAE = mae(downsample(decode(midFrame), GRID), downsample(decode(endFrame2), GRID));
+      ok(
+        'Auto-grow: mid-growth frame differs from end frame',
+        isValidFrame(decode(midFrame)) && midMAE > 0.1,
+        'midVsEnd MAE=' + midMAE.toFixed(2) + ' (floor 0.1)'
+      );
+    } else {
+      // Timing not stable under SwiftShader (frame lagged past the mid window):
+      // fall back to the end-state-only assertion.
+      const endOk = await page
+        .waitForFunction(() => State.get().growth >= 1, { timeout: 10000 })
+        .then(() => true)
+        .catch(() => false);
+      await page.waitForTimeout(900);
+      const f = await capture(page, evidenceDir, 'autogrow-tree-end-fallback');
+      ok(
+        'Auto-grow: re-select reaches a valid end frame (mid-capture unstable; end-state only)',
+        endOk && isValidFrame(decode(f)),
+        JSON.stringify(frameStats(decode(f)))
+      );
+    }
+
+    // Reduced motion: growth must snap to 1 immediately (no animation).
+    const rmBrowser = await chromium.launch({ headless: true, args: LAUNCH_ARGS });
+    const rmContext = await rmBrowser.newContext({ viewport: VIEWPORT });
+    await rmContext.addInitScript(() => {
+      const orig = window.matchMedia.bind(window);
+      window.matchMedia = (q) => {
+        if (String(q).indexOf('prefers-reduced-motion') !== -1) {
+          return {
+            matches: true,
+            media: q,
+            addEventListener() {},
+            removeEventListener() {},
+            addListener() {},
+            removeListener() {},
+            dispatchEvent() { return false; }
+          };
+        }
+        return orig(q);
+      };
+    });
+    const rmPage = await rmContext.newPage();
+    await rmPage.goto(url, { waitUntil: 'load', timeout: 90000 });
+    await rmPage.waitForTimeout(2500);
+    const rmStart = await rmPage.locator('#onboard-start').count();
+    if (rmStart) { try { await rmPage.locator('#onboard-start').click(); } catch (e) { /* dismissal failed; continue */ } }
+    const rmResult = await rmPage.evaluate(() => {
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      App.setMode('tree');
+      const growth = State.get().growth;
+      App.setMode('mandelbrot');
+      return { reduced, growth };
+    });
+    ok(
+      'Reduced motion: growth snaps to 1 on select (no animation)',
+      rmResult.reduced === true && rmResult.growth === 1,
+      'reduced=' + rmResult.reduced + ' growth=' + rmResult.growth
+    );
+    await rmPage.close();
+    await rmContext.close();
+    await rmBrowser.close();
+
     // ---------- Golden image: pixel regression against the committed baseline ----------
     console.log('\n-- Golden image: pixel regression --');
     {

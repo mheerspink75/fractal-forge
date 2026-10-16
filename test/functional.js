@@ -418,6 +418,71 @@ console.log('--- A11y ---');
   check('A11y reset', M.A11y.get().highContrast === false);
 }
 
+console.log('--- App (L-system auto-growth animator) ---');
+{
+  // Ease-out curve endpoints and clamping.
+  check('easeOutGrowth(0) === 0', M.App.easeOutGrowth(0) === 0);
+  check('easeOutGrowth(1) === 1', M.App.easeOutGrowth(1) === 1);
+  check('easeOutGrowth clamps t > 1 to 1', M.App.easeOutGrowth(5) === 1);
+  check('easeOutGrowth clamps t < 0 to 0', M.App.easeOutGrowth(-1) === 0);
+  check(
+    'easeOutGrowth monotone (0.25 < 0.75)',
+    M.App.easeOutGrowth(0.25) < M.App.easeOutGrowth(0.75)
+  );
+  check(
+    'easeOutGrowth is ease-OUT (fast start: f(0.25) > 0.25)',
+    M.App.easeOutGrowth(0.25) > 0.25
+  );
+
+  // Normal path: starts at 0, animates with dt, reaches exactly 1 at the end.
+  M.State.reset();
+  M.State.set({ mode: 'tree', growth: 0.4 });
+  M.App.startAutoGrow();
+  check('startAutoGrow sets growth to 0', M.State.get().growth === 0);
+  M.App.autoGrowTick(0.5, false, false); // 20% of 2.5s
+  const mid = M.State.get().growth;
+  check('mid-flight growth in (0,1)', mid > 0 && mid < 1);
+  M.App.autoGrowTick(2.0, false, false); // past the 2.5s duration
+  check('past duration growth reaches exactly 1', M.State.get().growth === 1);
+  M.App.autoGrowTick(1.0, false, false);
+  check('animator is one-shot (stays at 1, no wrap)', M.State.get().growth === 1);
+
+  // Pause freezes the animator; resume continues from the same point.
+  M.App.startAutoGrow();
+  const g0 = M.State.get().growth;
+  M.App.autoGrowTick(1.0, true, false);
+  check('paused: growth frozen', M.State.get().growth === g0);
+  M.App.autoGrowTick(0.3, false, false);
+  check('resume: growth continues', M.State.get().growth > g0);
+
+  // Manual override (slider) cancels the animator.
+  M.App.startAutoGrow();
+  M.App.cancelAutoGrow();
+  const g1 = M.State.get().growth;
+  M.App.autoGrowTick(2.0, false, false);
+  check('cancelled: growth unchanged by further ticks', M.State.get().growth === g1);
+
+  // Non-lsystem modes are unaffected.
+  M.State.set({ mode: 'mandelbrot', growth: 0.3 });
+  M.App.startAutoGrow();
+  check('non-lsystem mode: growth untouched', M.State.get().growth === 0.3);
+
+  // Reduced motion: snaps straight to 1 without animating.
+  M.State.set({ mode: 'tree', growth: 0.2 });
+  M.A11y.set({ reducedMotion: true });
+  M.App.startAutoGrow();
+  check('reduced motion: growth snaps to 1 on start', M.State.get().growth === 1);
+  // ...and an in-flight animation snaps to 1 when reduced motion turns on.
+  M.A11y.set({ reducedMotion: false });
+  M.State.set({ mode: 'tree', growth: 0.2 });
+  M.App.startAutoGrow();
+  M.App.autoGrowTick(0.5, false, false);
+  check('mid-flight before snap: growth < 1', M.State.get().growth < 1);
+  M.App.autoGrowTick(0.1, false, true); // reduced motion enabled mid-flight
+  check('reduced motion mid-flight: growth snaps to 1', M.State.get().growth === 1);
+  M.A11y.reset();
+}
+
 console.log('--- Gallery (localStorage + schema migration) ---');
 {
   const result = M.Gallery.save('Test Art');
