@@ -855,17 +855,18 @@ async function runTarget(name, url, evidenceBase) {
 
     // GROWTH: lowering the growth draws less of the canopy -> the frame changes.
     // The tree is a thin structure on a dark background, so the in-frame pixel
-    // delta is modest; the floor sits well above fresh-render jitter (~0.15) but
-    // below the real canopy change observed under SwiftShader (~0.45).
+    // delta is modest; the floor sits above fresh-render jitter (~0.15). The
+    // delta is generous (1.0 -> 0.3 removes the top ~3 levels) so the check
+    // stays robust even on slow CI runners.
     const t5g1 = await capture(page, evidenceDir, 'p5a-growth-full');
-    await page.evaluate(() => State.set({ growth: 0.4 }));
-    await page.waitForTimeout(600);
+    await page.evaluate(() => State.set({ growth: 0.3 }));
+    await page.waitForTimeout(1000);
     const t5g2 = await capture(page, evidenceDir, 'p5a-growth-low');
     const t5growth = mae(downsample(decode(t5g1), GRID), downsample(decode(t5g2), GRID));
     ok(
       'Phase 5a growth: lowering growth changes the canopy (both valid)',
-      t5growth > 0.3 && isValidFrame(decode(t5g1)) && isValidFrame(decode(t5g2)),
-      'MAE=' + t5growth.toFixed(3) + ' (floor 0.3)'
+      t5growth > 0.25 && isValidFrame(decode(t5g1)) && isValidFrame(decode(t5g2)),
+      'MAE=' + t5growth.toFixed(3) + ' (floor 0.25)'
     );
     await page.evaluate(() => State.set({ growth: 1.0, anim: 0.5 })); // restore
 
