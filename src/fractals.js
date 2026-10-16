@@ -131,6 +131,18 @@ export const Fractals = (() => {
       span: 2.0,
       iterations: 256,
       power: 8
+    },
+    fractalTree3d: {
+      label: 'Fractal Tree 3D',
+      group: '3d',
+      kind: 'gpu3d',
+      shader: 'FRACTAL_TREE',
+      center: [0.0, 0.0],
+      span: 2.0,
+      iterations: 256,
+      // The tree is taller/narrower than the bulb; frame it a touch closer so
+      // the canopy fills the view at both fresh seeds (In-frame requirement).
+      orbitRadius: 2.4
     }
   };
 
@@ -148,7 +160,8 @@ export const Fractals = (() => {
     'dragon',
     'tree',
     'plant',
-    'mandelbulb'
+    'mandelbulb',
+    'fractalTree3d'
   ];
 
   function get(id) {

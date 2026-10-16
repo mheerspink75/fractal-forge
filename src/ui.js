@@ -601,6 +601,24 @@ export const UI = (() => {
         Camera.setOrbitRadius(3.0);
         State.set({ camAngle: 0, orbitRadius: 3.0 });
       });
+    } else if (mode.shader === 'FRACTAL_TREE') {
+      title.textContent = mode.label;
+      // Reuse the lsystem growth control: more of the canopy is drawn as it rises.
+      addSlider(
+        'ms-growth',
+        'Growth',
+        0,
+        100,
+        1,
+        Math.round((State.get().growth || 1) * 100),
+        (v) => State.set({ growth: v / 100 }),
+        (v) => v + '%'
+      );
+      addButton('ms-reset-cam', 'Reset camera', () => {
+        Camera.setAngle(0);
+        Camera.setOrbitRadius(mode.orbitRadius || 3.0);
+        State.set({ camAngle: 0, orbitRadius: mode.orbitRadius || 3.0 });
+      });
     } else if (mode.kind === 'lsystem') {
       title.textContent = mode.label;
       addSlider(

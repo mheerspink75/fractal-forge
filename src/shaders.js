@@ -407,6 +407,132 @@ export const Shaders = (() => {
     }
   `;
 
+  /* ---------------- 3D Fractal Tree (raymarched I-tree) ---------------- */
+  // A self-similar branching tree: the unit trunk (a vertical segment, centered
+  // at the origin) is recursively replaced by N outward-tilted, scaled copies at
+  // its tip. The distance estimator walks the IFS "best branch" at each level
+  // (a valid-enough bound for a conservative raymarch step) and traps the
+  // distance to the trunk, so the result is the distance to the nearest branch
+  // along the closest path.
+  //
+  // u_growth gates how many levels are drawn (trunk at 0 -> full canopy at 1),
+  // porting the Phase-2 "grow into being" feel into 3D. u_seed offsets the
+  // branch twist (D3: the seed reshapes the tree). A gentle u_time sway is
+  // applied when u_anim > 0 (identity at u_anim=0 or t=0, so paused/shared
+  // frames and golden baselines stay static).
+  const FRACTAL_TREE =
+    COMMON +
+    `
+    uniform vec3  u_cam_pos;
+    uniform vec3  u_cam_target;
+    uniform float u_growth;      // 0..1, how much of the canopy is drawn
+
+    const int   MAXDEPTH     = 5;
+    const int   BRANCHES     = 3;
+    const float BRANCH_SCALE = 0.62;
+    const float BRANCH_ANGLE = 0.62;   // rad, outward tilt of each limb
+    const float BRANCH_RAD   = 0.20;   // limb tube radius (unit-trunk space)
+
+    // Trunk = vertical segment (0,-0.5,0)-(0,0.5,0), so the tree is centered
+    // at the origin and the default camera (looking at the origin) frames it.
+    float trunkDist(vec3 p) {
+      vec3 a = vec3(0.0, -0.5, 0.0);
+      vec3 b = vec3(0.0, 0.5, 0.0);
+      vec3 ab = b - a;
+      vec3 ap = p - a;
+      float h = clamp(dot(ap, ab), 0.0, 1.0);
+      return length(ap - ab * h);
+    }
+
+    mat3 rotY(float a) { float c = cos(a), s = sin(a); return mat3(c,0.0,-s, 0.0,1.0,0.0, s,0.0,c); }
+    mat3 rotX(float a) { float c = cos(a), s = sin(a); return mat3(1.0,0.0,0.0, 0.0,c,s, 0.0,-s,c); }
+
+    float treeDE(vec3 p) {
+      float d = 1e5;
+      float s = 1.0;
+      // Seed reshapes the tree (D3): each limb's twist scales with its index,
+      // so different seeds produce genuinely different canopies (not just a
+      // rotation). A gentle u_time sway is added when u_anim > 0.
+      float twistSeed = 0.3 * u_seed;
+      float sway = 0.3 * u_anim * sin(u_time * 0.5);
+      for (int i = 0; i < MAXDEPTH; i++) {
+        float fi = float(i);
+        // Growth gate: always draw the trunk (i=0); draw level i only once the
+        // canopy has grown past it. So the tree "grows into being" with u_growth.
+        if (i == 0 || (fi + 0.5 < u_growth * float(MAXDEPTH))) {
+          d = min(d, (trunkDist(p) - BRANCH_RAD) * s);
+        }
+        // Map p into the closest limb's local frame (best-branch IFS step).
+        vec3 best = p;
+        float bestD = 1e5;
+        for (int b = 0; b < BRANCHES; b++) {
+          float twist = 6.2831853 * float(b) / float(BRANCHES) + twistSeed * (float(b) + 1.0) + sway;
+          vec3 q = p - vec3(0.0, 0.5, 0.0);  // to the trunk tip
+          q = rotY(-twist) * q;              // undo twist
+          q = rotX(-BRANCH_ANGLE) * q;       // undo outward tilt
+          q = q / BRANCH_SCALE;              // undo scale
+          float db = trunkDist(q);
+          if (db < bestD) { bestD = db; best = q; }
+        }
+        p = best;
+        s *= BRANCH_SCALE;
+      }
+      return d;
+    }
+
+    vec3 calcNormal(vec3 p) {
+      vec2 e = vec2(1e-3, 0.0);
+      return normalize(vec3(
+        treeDE(p + e.xyy) - treeDE(p - e.xyy),
+        treeDE(p + e.yxy) - treeDE(p - e.yxy),
+        treeDE(p + e.yyx) - treeDE(p - e.yyx)
+      ));
+    }
+
+    void main() {
+      // Seed orbits the camera around the tree (u_cam_target), so the tree
+      // always fills the frame and the seed only changes which side is seen.
+      vec3 rel = u_cam_pos - u_cam_target;
+      float sa = 0.4 * u_seed;
+      float cs = cos(sa), sn = sin(sa);
+      vec3 ro = u_cam_target + vec3(rel.x * cs + rel.z * sn, rel.y, -rel.x * sn + rel.z * cs);
+      vec3 ww = normalize(u_cam_target - ro);
+      vec3 uu = normalize(cross(ww, vec3(0.0, 1.0, 0.0)));
+      vec3 vv = cross(uu, ww);
+      vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
+      vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.6 * ww);
+
+      float t = 0.0;
+      float dist = 1e9;
+      vec3 pos = ro;
+      for (int i = 0; i < 80; i++) {
+        pos = ro + rd * t;
+        dist = treeDE(pos);
+        if (dist < 0.0) dist = 0.0;
+        t += min(dist, 0.4) * 0.7;   // conservative step (the DE is a heuristic bound)
+        if (t > 30.0 || dist < 0.0012) break;
+      }
+
+      vec3 col;
+      if (dist < 0.0012) {
+        vec3 n = calcNormal(pos);
+        vec3 lightDir = normalize(vec3(0.5, 0.8, -0.6));
+        float diff = max(dot(n, lightDir), 0.0);
+        float spec = pow(max(dot(reflect(-lightDir, n), rd), 0.0), 24.0);
+        float fresnel = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
+        // Woody gradient by height, tinted by the active palette (palettePhase).
+        float h = clamp(pos.y + 0.5, 0.0, 1.0);
+        vec3 wood = mix(vec3(0.42, 0.28, 0.15), vec3(0.62, 0.78, 0.38), h);
+        vec3 base = mix(wood, palette(pos.y * 0.25 + u_palette_phase), 0.45);
+        col = base * (0.22 + diff * 1.05) + spec * 0.5 + fresnel * base * 0.7;
+      } else {
+        col = vec3(0.015, 0.02, 0.04);
+      }
+      col *= 1.0 + u_audio.x * 0.3;
+      gl_FragColor = vec4(applyContrast(col), 1.0);
+    }
+  `;
+
   /* ---------------- Post-processing passes ---------------- */
 
   const POST_HEADER = `
@@ -548,6 +674,7 @@ export const Shaders = (() => {
     NEURAL_BLOOM,
     QUANTUM_FIELD,
     MANDELBULB,
+    FRACTAL_TREE,
     BRIGHT_PASS,
     BLUR,
     COMPOSITE,
