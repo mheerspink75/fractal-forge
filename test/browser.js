@@ -895,11 +895,14 @@ async function runTarget(name, url, evidenceBase) {
     await page.waitForTimeout(2500); // settle the raymarch (heavy under software GL)
 
     // ALIVE: anim on -> auto-orbit (monotonic) + breathing exponent move the
-    // frame between two captures taken ~3s apart.
+    // frame between two captures. The gap is generous on purpose: on slow
+    // SwiftShader machines the per-tick dt cap means the camera accumulates
+    // its drift over wall-clock time, so the near-symmetric p=3 silhouette
+    // needs a longer window than the spiky bulb to move measurably at 64x64.
     await page.evaluate(() => State.set({ anim: 1.0, seed: 1 }));
     await page.waitForTimeout(300);
     const pba1 = await capture(page, evidenceDir, 'p5b-alive-a');
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(8000);
     const pba2 = await capture(page, evidenceDir, 'p5b-alive-b');
     const pbAlive = mae(downsample(decode(pba1), GRID), downsample(decode(pba2), GRID));
     ok(
