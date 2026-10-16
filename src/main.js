@@ -449,7 +449,8 @@ const Engine = (() => {
     DREAMSCAPE: Shaders.DREAMSCAPE,
     NEURAL_BLOOM: Shaders.NEURAL_BLOOM,
     QUANTUM_FIELD: Shaders.QUANTUM_FIELD,
-    MANDELBULB: Shaders.MANDELBULB
+    MANDELBULB: Shaders.MANDELBULB,
+    FRACTAL_TREE: Shaders.FRACTAL_TREE
   };
 
   function getProgram(name) {
@@ -551,6 +552,11 @@ const Engine = (() => {
       GL.setUniform('u_cam_pos', params.camPos, prog);
       GL.setUniform('u_cam_target', params.camTarget, prog);
       GL.setUniform('u_power', params.power, prog);
+    }
+    if (mode.shader === 'FRACTAL_TREE') {
+      GL.setUniform('u_cam_pos', params.camPos, prog);
+      GL.setUniform('u_cam_target', params.camTarget, prog);
+      GL.setUniform('u_growth', params.growth != null ? params.growth : 1.0, prog);
     }
     if (mode.shader === 'JULIA') {
       GL.setUniform('u_julia_phase', params.juliaPhase || 0, prog);
@@ -1619,6 +1625,9 @@ const App = (() => {
     });
     if (m.iterations) State.set({ iterations: m.iterations });
     if (m.power) State.set({ power: m.power });
+    // Per-mode 3D framing: the tree is viewed closer than the bulb, so set the
+    // orbit radius from the registry (applyWorld then drives the camera from it).
+    if (m.kind === 'gpu3d') State.set({ orbitRadius: m.orbitRadius || 3.0 });
   }
 
   function setMode(id) {
@@ -1989,10 +1998,16 @@ const App = (() => {
     ColorSystem.state.cycling = reduced ? false : !!s.cycling;
     if (!reduced) ColorSystem.tick(dt);
     autoGrowTick(dt, paused, reduced);
-    // Phase 4: while the Mandelbulb animates, the camera slowly orbits the
-    // bulb once the user's hands are off (touch() in the handlers below
-    // pauses the drift for a grace window).
-    if (s.mode === 'mandelbulb' && !paused && !reduced && s.anim > 0) {
+    // Phase 4/5a: while a 3D mode animates, the camera slowly orbits the
+    // subject once the user's hands are off (touch() in the handlers below
+    // pauses the drift for a grace window). This gives the 3D views a stable,
+    // always-present motion cue (the sway/breathing is layered on top).
+    if (
+      (s.mode === 'mandelbulb' || s.mode === 'fractalTree3d') &&
+      !paused &&
+      !reduced &&
+      s.anim > 0
+    ) {
       Camera.autoOrbit(dt, now);
     }
     Ambient.tick(dt);
@@ -2061,9 +2076,14 @@ const App = (() => {
     rebuildBuffers();
 
     Interaction.init(canvas);
+    // A 3D mode (Mandelbulb, Fractal Tree) is driven by orbit, not 2D pan/zoom.
+    const is3dMode = () => {
+      const m = Fractals.get(State.get().mode);
+      return !!m && m.kind === 'gpu3d';
+    };
     Interaction.register({
       onPan: (dx, dy) => {
-        if (State.get().mode === 'mandelbulb') {
+        if (is3dMode()) {
           Camera.touch();
           Camera.rotate3d(dx * 0.01);
         } else {
@@ -2072,7 +2092,7 @@ const App = (() => {
         syncCamera();
       },
       onZoom: (factor, x, y) => {
-        if (State.get().mode === 'mandelbulb') {
+        if (is3dMode()) {
           Camera.touch();
           Camera.setOrbitRadius(Camera.getOrbitRadius() / factor);
         } else {
@@ -2081,10 +2101,10 @@ const App = (() => {
         syncCamera();
       },
       onFocus: (x, y) => {
-        if (State.get().mode === 'mandelbulb') {
+        if (is3dMode()) {
           Camera.touch();
           Camera.setAngle(0);
-          Camera.setOrbitRadius(3.0);
+          Camera.setOrbitRadius(Fractals.get(State.get().mode).orbitRadius || 3.0);
         } else {
           Camera.focusAt(x, y);
         }

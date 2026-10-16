@@ -172,6 +172,7 @@ const SHADERS = [
   'NEURAL_BLOOM',
   'QUANTUM_FIELD',
   'MANDELBULB',
+  'FRACTAL_TREE',
   'BRIGHT_PASS',
   'BLUR',
   'COMPOSITE',
@@ -222,7 +223,8 @@ const FRACTAL = [
   'DREAMSCAPE',
   'NEURAL_BLOOM',
   'QUANTUM_FIELD',
-  'MANDELBULB'
+  'MANDELBULB',
+  'FRACTAL_TREE'
 ];
 const detailUsed = FRACTAL.some((n) => ((S[n] || '').match(/\bu_detail\b/g) || []).length >= 2);
 check(

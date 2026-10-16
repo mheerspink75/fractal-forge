@@ -22,7 +22,7 @@ export const Camera = (() => {
     center = { x: m.center[0], y: m.center[1] };
     zoom = (window.innerHeight || 800) / m.span;
     camAngle = 0;
-    orbitRadius = 3.0;
+    orbitRadius = m.orbitRadius || 3.0; // per-mode framing (e.g. the tree is closer)
     applyOrbit();
   }
 
