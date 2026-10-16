@@ -610,7 +610,11 @@ export const UI = (() => {
         100,
         1,
         Math.round((State.get().growth || 1) * 100),
-        (v) => State.set({ growth: v / 100 }),
+        (v) => {
+          // Touching the slider is a live override: stop the auto-growth pass.
+          if (actions.cancelAutoGrow) actions.cancelAutoGrow();
+          State.set({ growth: v / 100 });
+        },
         (v) => v + '%'
       );
     } else if (mode.shader === 'JULIA') {

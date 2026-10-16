@@ -1624,6 +1624,7 @@ const App = (() => {
   function setMode(id) {
     if (!Fractals.get(id)) return;
     applyModeDefaults(id);
+    startAutoGrow(); // replays growth for an lsystem (re)selection
     applyWorld();
     syncUrl();
   }
@@ -1631,6 +1632,7 @@ const App = (() => {
   function randomize() {
     const rng = Util.mulberry32((Date.now() ^ (Math.random() * 1e9)) >>> 0);
     Procedural.randomize(rng);
+    startAutoGrow(); // replays growth while in an lsystem mode
     applyWorld();
     syncUrl();
   }
@@ -1640,6 +1642,7 @@ const App = (() => {
     const id = Fractals.ORDER[Math.floor(rng() * Fractals.ORDER.length)];
     applyModeDefaults(id);
     Procedural.randomize(rng);
+    startAutoGrow(); // replays growth if the new world is an lsystem
     applyWorld();
     UI.toast('Forged a new world', 'ok');
     syncUrl();
@@ -1734,6 +1737,66 @@ const App = (() => {
     UI.syncSliders();
     UI.updateGradientBar();
     UI.renderModeSpecific();
+  }
+
+  // ---------- L-system auto-growth ----------
+  // When an lsystem mode is (re)selected — or randomized while in one — growth
+  // animates 0 -> 1 over AUTO_GROW_SECONDS with ease-out, writing through
+  // State.set like any other control (so Share/URL/export all observe it).
+  // Transient: not in State defaults and never serialized. The growth slider
+  // cancels it; reduced motion snaps straight to 1; pausing freezes it.
+  const AUTO_GROW_SECONDS = 2.5;
+  let autoGrow = { active: false, t: 0 };
+
+  function easeOutGrowth(t) {
+    const x = Util.clamp(t, 0, 1);
+    return 1 - Math.pow(1 - x, 3);
+  }
+
+  function startAutoGrow() {
+    const mode = Fractals.get(State.get().mode);
+    if (!mode || mode.kind !== 'lsystem') return;
+    if (A11y.get().reducedMotion) {
+      // Reduced motion: no animation, snap to the final state.
+      autoGrow.active = false;
+      State.set({ growth: 1 });
+      return;
+    }
+    autoGrow.active = true;
+    autoGrow.t = 0;
+    State.set({ growth: 0 });
+  }
+
+  function cancelAutoGrow() {
+    autoGrow.active = false;
+  }
+
+  function syncGrowthSlider() {
+    const el = document.getElementById('ms-growth');
+    if (!el) return;
+    const pct = Math.round((State.get().growth || 0) * 100);
+    el.value = pct;
+    if (el.parentElement && el.parentElement.querySelector) {
+      const span = el.parentElement.querySelector('.val');
+      if (span) span.textContent = pct + '%';
+    }
+  }
+
+  function autoGrowTick(dt, paused, reduced) {
+    if (!autoGrow.active) return;
+    if (reduced) {
+      // Reduced motion switched on mid-flight: snap to the final state.
+      autoGrow.active = false;
+      State.set({ growth: 1 });
+      syncGrowthSlider();
+      return;
+    }
+    if (paused) return; // paused: frozen in place; resume continues it
+    autoGrow.t += dt / AUTO_GROW_SECONDS;
+    const done = autoGrow.t >= 1;
+    if (done) autoGrow.active = false;
+    State.set({ growth: done ? 1 : easeOutGrowth(autoGrow.t) });
+    syncGrowthSlider();
   }
 
   function galleryRestore(id) {
@@ -1918,6 +1981,7 @@ const App = (() => {
     ColorSystem.state.speed = s.paletteSpeed != null ? s.paletteSpeed : 0.2;
     ColorSystem.state.cycling = reduced ? false : !!s.cycling;
     if (!reduced) ColorSystem.tick(dt);
+    autoGrowTick(dt, paused, reduced);
     Ambient.tick(dt);
     adaptQuality(dt, now, a11y);
     const params = {
@@ -2018,6 +2082,7 @@ const App = (() => {
       share,
       toggleAudio,
       saveArtwork,
+      cancelAutoGrow,
       galleryRestore,
       importCode,
       exportAt,
@@ -2070,7 +2135,11 @@ const App = (() => {
     importCode,
     exportAt,
     togglePause,
-    getLiveTime
+    getLiveTime,
+    startAutoGrow,
+    cancelAutoGrow,
+    autoGrowTick,
+    easeOutGrowth
   };
 })();
 
