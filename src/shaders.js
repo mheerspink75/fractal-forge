@@ -91,6 +91,10 @@ export const Shaders = (() => {
       vec2 c = toFractal();
       // Seed-driven view offset (bounded, continuous, deterministic in u_seed).
       c += vec2(0.06 * sin(u_seed * 1.7), 0.06 * cos(u_seed * 2.3));
+      // Slow domain warp (bounded sinusoid; zero at u_time = 0, so the t=0
+      // golden frame is unchanged).
+      float tw = u_time * 0.08 * u_anim;
+      c += vec2(0.02 * sin(tw), 0.02 * sin(0.7 * tw));
       vec2 z = vec2(0.0);
       float escape = -1.0;
       for (int i = 0; i < 4096; i++) {
@@ -138,6 +142,10 @@ export const Shaders = (() => {
       vec2 c = toFractal();
       // Seed-driven view offset (bounded, continuous, deterministic in u_seed).
       c += vec2(0.06 * sin(u_seed * 2.1), 0.06 * cos(u_seed * 1.9));
+      // Gentle rotation drift (identity rotation at u_time = 0).
+      float ang = u_time * 0.06 * u_anim;
+      float sa = sin(ang), ca = cos(ang);
+      c = mat2(ca, -sa, sa, ca) * c;
       vec2 z = vec2(0.0);
       float escape = -1.0;
       for (int i = 0; i < 4096; i++) {
@@ -159,6 +167,10 @@ export const Shaders = (() => {
     `
     void main() {
       vec2 c = toFractal();
+      // Slow rotation of the basin view (identity at u_time = 0).
+      float ang = u_time * 0.05 * u_anim;
+      float sa = sin(ang), ca = cos(ang);
+      c = mat2(ca, -sa, sa, ca) * c;
       vec2 z = c;
       // Seed picks the target root (a unit-circle point); rotating the root
       // configuration changes the basin layout deterministically.
