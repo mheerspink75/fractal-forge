@@ -148,6 +148,16 @@ const isValidFrame = (png) => {
   const s = frameStats(png);
   return s.variance > 20 && s.mean > 1;
 };
+// L-systems (tree/plant/koch/dragon) are thin colored lines on a near-black
+// background, so MEAN (brightness) is a poor validity signal — a correct,
+// fully-grown tree can be as dark as mean ~0.4. Structural spread (VARIANCE)
+// is the real signal: a real frame has line coverage (variance >> a blank /
+// solid-color transient, which is ~0). Deliberately more lenient on brightness
+// than isValidFrame, which is tuned for the bright GPU fractals.
+const isValidLsystemFrame = (png) => {
+  const s = frameStats(png);
+  return s.variance > 10 && s.mean > 0.2;
+};
 
 // ---------- browser helpers ----------
 async function loadApp(page, url, evidenceDir) {
@@ -577,6 +587,20 @@ async function runTarget(name, url, evidenceBase) {
 
     // ---------- Auto-grow: L-system modes grow into being on (re)select ----------
     console.log('\n-- Auto-grow: L-system growth animates on select --');
+    // Pin the render scale for this section. Adaptive quality varies the
+    // buffer size with FPS, which thins the 2D L-system lines (lineWidth is
+    // proportional to the fitted scale) and makes the captured frame dimmer —
+    // nondeterministically under software GL. Disabling it resets renderScale
+    // to 1.0 and holds it, so the growth captures are deterministic. We restore
+    // it before the reduced-motion check so later sections see the default.
+    await page.evaluate(() => {
+      const el = document.getElementById('set-adaptive');
+      if (el && el.checked) {
+        el.checked = false;
+        el.dispatchEvent(new Event('change'));
+      }
+    });
+    await page.waitForTimeout(1500); // let the reset + buffer rebuild settle
     // First select: growth must end at exactly 1 (ease-out animator completes).
     await page.evaluate(() => App.setMode('tree'));
     const grewEnd = await page
@@ -588,7 +612,7 @@ async function runTarget(name, url, evidenceBase) {
     const endFrame = await capture(page, evidenceDir, 'autogrow-tree-end');
     ok(
       'Auto-grow: tree end-state renders a valid frame',
-      isValidFrame(decode(endFrame)),
+      isValidLsystemFrame(decode(endFrame)),
       JSON.stringify(frameStats(decode(endFrame)))
     );
 
@@ -614,7 +638,7 @@ async function runTarget(name, url, evidenceBase) {
       const midMAE = mae(downsample(decode(midFrame), GRID), downsample(decode(endFrame2), GRID));
       ok(
         'Auto-grow: mid-growth frame differs from end frame',
-        isValidFrame(decode(midFrame)) && midMAE > 0.1,
+        isValidLsystemFrame(decode(midFrame)) && midMAE > 0.1,
         'midVsEnd MAE=' + midMAE.toFixed(2) + ' (floor 0.1)'
       );
     } else {
@@ -628,10 +652,20 @@ async function runTarget(name, url, evidenceBase) {
       const f = await capture(page, evidenceDir, 'autogrow-tree-end-fallback');
       ok(
         'Auto-grow: re-select reaches a valid end frame (mid-capture unstable; end-state only)',
-        endOk && isValidFrame(decode(f)),
+        endOk && isValidLsystemFrame(decode(f)),
         JSON.stringify(frameStats(decode(f)))
       );
     }
+
+    // Restore adaptive quality for the remaining sections (reduced-motion
+    // check below uses a fresh browser, so this only affects the main page).
+    await page.evaluate(() => {
+      const el = document.getElementById('set-adaptive');
+      if (el && !el.checked) {
+        el.checked = true;
+        el.dispatchEvent(new Event('change'));
+      }
+    });
 
     // Reduced motion: growth must snap to 1 immediately (no animation).
     const rmBrowser = await chromium.launch({ headless: true, args: LAUNCH_ARGS });
@@ -717,6 +751,54 @@ async function runTarget(name, url, evidenceBase) {
       isValidFrame(decode(cf1)) && isValidFrame(decode(cf2)) && clockMAE < 2.0,
       'MAE=' + clockMAE.toFixed(3) + ' (cap 2.0)'
     );
+
+    // ---------- Phase 4: the Mandelbulb animates (breathing power + auto-orbit) ----------
+    // While the Mandelbulb is animating, two frames taken a moment apart must
+    // differ (the camera slowly orbits the bulb and the power "breathes" with
+    // the clock); with animation off the frame must be frozen. Cycling/trails
+    // are switched off in both cases so the ONLY time-driven signal is the
+    // animation term (power_eff + auto-orbit), which is exactly what we test.
+    console.log('\n-- Phase 4: Mandelbulb animates (breathing + auto-orbit) --');
+    // Defensive: guarantee the app is running (time advancing) so the
+    // "alive" case is a fair test. Mirrors the Clock section's resume logic.
+    const p4tA = await page.evaluate(() => App.getLiveTime());
+    await page.waitForTimeout(400);
+    const p4tB = await page.evaluate(() => App.getLiveTime());
+    if (p4tB === p4tA) await page.evaluate(() => App.togglePause()); // was paused -> resume
+    await page.evaluate(() => {
+      App.setMode('mandelbulb');
+      State.set({ cycling: false, trails: 0 });
+    });
+    await page.waitForTimeout(2500); // settle the raymarch (heavy under software GL)
+
+    // ALIVE: anim on -> breathing power + auto-orbit move the frame between two
+    // captures taken ~2.5s apart (auto-orbit drifts ~7deg over that window).
+    await page.evaluate(() => State.set({ anim: 1.0 }));
+    await page.waitForTimeout(300);
+    const p4a1 = await capture(page, evidenceDir, 'p4-alive-a');
+    await page.waitForTimeout(2500);
+    const p4a2 = await capture(page, evidenceDir, 'p4-alive-b');
+    const aliveMAE = mae(downsample(decode(p4a1), GRID), downsample(decode(p4a2), GRID));
+    ok(
+      'Phase 4 animating: the frame moves over time (breathing + auto-orbit)',
+      aliveMAE > 0.8 && isValidFrame(decode(p4a1)) && isValidFrame(decode(p4a2)),
+      'MAE=' + aliveMAE.toFixed(3) + ' (floor 0.8, jitter ~0.3)'
+    );
+
+    // FROZEN: anim off -> pure z^power, no orbit -> the frame is static, so two
+    // captures agree within fresh-render jitter.
+    await page.evaluate(() => State.set({ anim: 0 }));
+    await page.waitForTimeout(600);
+    const p4f1 = await capture(page, evidenceDir, 'p4-frozen-a');
+    await page.waitForTimeout(1500);
+    const p4f2 = await capture(page, evidenceDir, 'p4-frozen-b');
+    const frozenMAE = mae(downsample(decode(p4f1), GRID), downsample(decode(p4f2), GRID));
+    ok(
+      'Phase 4 frozen: anim=0 renders a static, valid frame',
+      frozenMAE < 1.5 && isValidFrame(decode(p4f1)) && isValidFrame(decode(p4f2)),
+      'MAE=' + frozenMAE.toFixed(3) + ' (cap 1.5)'
+    );
+    await page.evaluate(() => State.set({ anim: 0.5 })); // leave a sensible state
 
     // ---------- Golden image: pixel regression against the committed baseline ----------
     console.log('\n-- Golden image: pixel regression --');

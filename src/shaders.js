@@ -333,7 +333,7 @@ export const Shaders = (() => {
     uniform vec3 u_cam_target;
     uniform float u_power;
 
-    float mandelbulbDE(vec3 pos) {
+    float mandelbulbDE(vec3 pos, float pw) {
       vec3 z = pos;
       float dr = 1.0;
       float r = 0.0;
@@ -342,10 +342,10 @@ export const Shaders = (() => {
         r = length(z);
         if (r > 2.0) break;
         if (r < EPS) r = EPS;   // guard division by zero and log(0)
-        float theta = acos(clamp(z.z / r, -1.0, 1.0)) * u_power;
-        float phi = atan(z.y, z.x) * u_power;
-        float zr = pow(r, u_power);
-        dr = pow(r, u_power - 1.0) * u_power * dr + 1.0;
+        float theta = acos(clamp(z.z / r, -1.0, 1.0)) * pw;
+        float phi = atan(z.y, z.x) * pw;
+        float zr = pow(r, pw);
+        dr = pow(r, pw - 1.0) * pw * dr + 1.0;
         z = zr * vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)) + pos;
       }
       r = max(r, EPS);
@@ -372,9 +372,14 @@ export const Shaders = (() => {
       float t = 0.0;
       float dist = 1e9;
       vec3 pos = ro;
+      // Animation = the classic "breathing powerfractal" move: the power
+      // oscillates with the clock. At u_anim = 0 (or t = 0) this is the
+      // pure z^power Mandelbulb, so paused/shared frames stay static and
+      // golden baselines are untouched.
+      float power_eff = u_power + 0.5 * u_anim * sin(u_time * 0.1);
       for (int i = 0; i < 160; i++) {
         pos = ro + rd * t;
-        dist = mandelbulbDE(pos);
+        dist = mandelbulbDE(pos, power_eff);
         if (dist < 0.0) dist = 0.0;   // guard against negative/NaN estimates
         t += min(dist, 0.5) * 0.85;  // cap the step to avoid tunneling
         if (t > 24.0 || dist < 0.0006) break;
@@ -384,9 +389,9 @@ export const Shaders = (() => {
       if (dist < 0.0006) {
         vec2 e = vec2(1e-4, 0.0);
         vec3 n = normalize(vec3(
-          mandelbulbDE(pos + e.xyy) - mandelbulbDE(pos - e.xyy),
-          mandelbulbDE(pos + e.yxy) - mandelbulbDE(pos - e.yxy),
-          mandelbulbDE(pos + e.yyx) - mandelbulbDE(pos - e.yyx)
+          mandelbulbDE(pos + e.xyy, power_eff) - mandelbulbDE(pos - e.xyy, power_eff),
+          mandelbulbDE(pos + e.yxy, power_eff) - mandelbulbDE(pos - e.yxy, power_eff),
+          mandelbulbDE(pos + e.yyx, power_eff) - mandelbulbDE(pos - e.yyx, power_eff)
         ));
         vec3 lightDir = normalize(vec3(0.5, 0.8, -0.6));
         float diff = max(dot(n, lightDir), 0.0);

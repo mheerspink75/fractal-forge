@@ -86,6 +86,28 @@ export const Camera = (() => {
     return orbitRadius;
   }
 
+  // --- 3D auto-orbit (Phase 4) ---
+  // While the Mandelbulb is animating, the camera drifts around the bulb at a
+  // slow, constant rate — the "orbit" half of the classic 3D intro. Any user
+  // touch (orbit drag, zoom, focus) stops the drift for a grace window so the
+  // camera never fights the hand.
+  const AUTO_ORBIT_RATE = 0.05;   // rad/s — same family as the 2D pan rates
+  const AUTO_ORBIT_IDLE_MS = 2000;
+  let lastTouch = -Infinity;
+
+  // Call from every user interaction with the 3D view.
+  function touch() {
+    lastTouch = performance.now();
+  }
+
+  // Advances the orbit when the view is idle. Safe no-op when the user is
+  // actively driving the camera.
+  function autoOrbit(dt, now) {
+    if (now - lastTouch <= AUTO_ORBIT_IDLE_MS) return;
+    camAngle += AUTO_ORBIT_RATE * dt;
+    applyOrbit();
+  }
+
   return {
     get center() {
       return center;
@@ -110,6 +132,8 @@ export const Camera = (() => {
     setAngle,
     getAngle,
     setOrbitRadius,
-    getOrbitRadius
+    getOrbitRadius,
+    touch,
+    autoOrbit
   };
 })();
