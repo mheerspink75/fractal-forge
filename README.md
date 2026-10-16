@@ -66,10 +66,13 @@ exact artwork (mode, palette, seed, camera, effects) is reproduced on any machin
 
 #### Shareable URLs
 Any world is also **linkable**: the address bar mirrors the shareable state as
-`?fractal=<mode>&seed=<n>&palette=<0–8>&time=<0–1>&iterations=<n>` (updated via `history.replaceState`, so the
+`?fractal=<mode>&seed=<n>&palette=<0–8>&time=<0–1>&iterations=<n>&clock=<seconds>` (updated via `history.replaceState`, so the
 back/forward stack stays clean). Opening such a link restores that fractal, seed, palette, animation speed,
-and iteration count before the first render. Invalid or out-of-range values are dropped or clamped,
-so a junk link always renders a valid default world instead of breaking.
+and iteration count before the first render. The optional `clock` field reproduces the exact paused
+moment: pausing (Space) pins `clock=<time>` into the address bar and resuming removes it, so a shared
+link re-runs from that moment (the app still animates forward from there unless paused or reduced
+motion is on). Invalid or out-of-range values are dropped or clamped, so a junk link always renders a
+valid default world instead of breaking.
 
 ### Export
 Render to **PNG** at your current resolution or at wallpaper sizes — **1920×1080, 2560×1440,
@@ -325,8 +328,11 @@ The Node suite can't run WebGL, so `test/browser.js` drives real headless Chromi
   composition when the seed changes),
 - **D4** — export matches the on-screen composition at **live** animation time (not `time = 0`),
 - **D10** — action keys are inert behind an open modal, while pan/zoom/space still work,
-- **Share URL** — a linkable world (`?fractal=…&seed=…&palette=…&time=…&iterations=…`) restores
-  its exact state and renders a valid frame, and junk links fall back to defaults,
+- **Share URL** — a linkable world (`?fractal=…&seed=…&palette=…&time=…&iterations=…`, plus
+  `clock=…` when paused on a moment) restores its exact state and renders a valid frame, and junk
+  links fall back to defaults,
+- **Clock URL** — pausing writes `clock=<t>` into the address bar and resuming removes it, and two
+  fresh loads of the same `clock=` link render near-identical frames (determinism of the paused moment),
 - **Golden image** — a canonical scene matches a committed 64×64 pixel baseline within a tight
   MAE cap (SwiftShader renders are ~0.2–0.5 MAE stable across fresh launches; real regressions
   move ≥ 2.5), so visual breakage fails CI on both the local and production targets.

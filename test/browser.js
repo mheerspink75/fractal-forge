@@ -674,6 +674,50 @@ async function runTarget(name, url, evidenceBase) {
     await rmContext.close();
     await rmBrowser.close();
 
+    // ---------- Clock URL: a paused moment is linkable and reproducible ----------
+    console.log('\n-- Clock URL: paused moments are linkable --');
+    // Determine the current run state (time only advances when unpaused), so
+    // the first toggle below is guaranteed to be a pause.
+    const tSampleA = await page.evaluate(() => App.getLiveTime());
+    await page.waitForTimeout(400);
+    const tSampleB = await page.evaluate(() => App.getLiveTime());
+    if (tSampleB === tSampleA) await page.evaluate(() => App.togglePause()); // was paused -> resume
+    await page.waitForTimeout(600); // let the clock travel
+    await page.evaluate(() => App.togglePause()); // now a pause
+    const pausedUrl = await page.evaluate(() => location.search);
+    const clockMatch = /([?&])clock=(\d+(?:\.\d+)?)/.exec(pausedUrl);
+    const clockVal = clockMatch ? parseFloat(clockMatch[2]) : NaN;
+    ok(
+      'Clock: pausing writes clock=<t> into the URL',
+      Number.isFinite(clockVal) && clockVal > 0,
+      pausedUrl
+    );
+    await page.evaluate(() => App.togglePause()); // resume
+    const resumedUrl = await page.evaluate(() => location.search);
+    ok('Clock: resuming removes the clock param', resumedUrl.indexOf('clock=') === -1, resumedUrl);
+
+    // Determinism: two fresh loads of the same clock= URL render valid,
+    // near-identical frames (the check that would have failed pre-Phase-3).
+    const CLOCK_QUERY = '?fractal=julia&seed=123&anim=1&clock=10';
+    async function clockCapture(name) {
+      const p = await context.newPage();
+      await p.goto(url + CLOCK_QUERY, { waitUntil: 'load' });
+      await p.waitForTimeout(2500);
+      const st = await p.locator('#onboard-start').count();
+      if (st) { try { await p.locator('#onboard-start').click(); } catch (e) { /* already gone */ } }
+      const f = await capture(p, evidenceDir, name);
+      await p.close();
+      return f;
+    }
+    const cf1 = await clockCapture('clock-load-a');
+    const cf2 = await clockCapture('clock-load-b');
+    const clockMAE = mae(downsample(decode(cf1), GRID), downsample(decode(cf2), GRID));
+    ok(
+      'Clock: two fresh loads of clock=10 render valid, near-identical frames',
+      isValidFrame(decode(cf1)) && isValidFrame(decode(cf2)) && clockMAE < 2.0,
+      'MAE=' + clockMAE.toFixed(3) + ' (cap 2.0)'
+    );
+
     // ---------- Golden image: pixel regression against the committed baseline ----------
     console.log('\n-- Golden image: pixel regression --');
     {

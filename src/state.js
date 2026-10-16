@@ -16,6 +16,7 @@ export const State = (() => {
     iterations: 256,
     detail: 0.5,
     anim: 0.5,
+    clock: 0,
     bloom: 0.6,
     trails: 0.0,
     aberration: 0.2,
@@ -49,20 +50,26 @@ export const State = (() => {
   }
 
   // ---------- Shareable URL (link a world) ----------
-  // The five fields carried in the URL, with bounds mirroring Share's
+  // The six fields carried in the URL, with bounds mirroring Share's
   // NUMERIC ranges so a URL can never smuggle an out-of-range uniform.
+  // `clock` is the paused moment (seconds, float >= 0); toQuery omits it
+  // while it is 0, so a resumed/non-paused world never carries it.
   const URL_FIELDS = [
     { key: 'mode', param: 'fractal', type: 'mode' },
     { key: 'seed', param: 'seed', type: 'int', range: [0, 1e9] },
     { key: 'palette', param: 'palette', type: 'int', range: [0, 8] },
     { key: 'anim', param: 'time', type: 'num', range: [0, 1] },
-    { key: 'iterations', param: 'iterations', type: 'int', range: [16, 4096] }
+    { key: 'iterations', param: 'iterations', type: 'int', range: [16, 4096] },
+    { key: 'clock', param: 'clock', type: 'num', range: [0, 3600] }
   ];
 
-  // Serialize a state into a query string (no leading '?').
+  // Serialize a state into a query string (no leading '?'). The clock field
+  // only appears when it names a moment (> 0): pausing pins it, resuming
+  // drops it (clock back to 0).
   function toQuery(s) {
+    const fields = URL_FIELDS.filter((f) => f.param !== 'clock' || Number(s[f.key]) > 0);
     return (
-      '?' + URL_FIELDS.map((f) => f.param + '=' + encodeURIComponent(String(s[f.key]))).join('&')
+      '?' + fields.map((f) => f.param + '=' + encodeURIComponent(String(s[f.key]))).join('&')
     );
   }
 
