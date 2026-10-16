@@ -1989,6 +1989,12 @@ const App = (() => {
     ColorSystem.state.cycling = reduced ? false : !!s.cycling;
     if (!reduced) ColorSystem.tick(dt);
     autoGrowTick(dt, paused, reduced);
+    // Phase 4: while the Mandelbulb animates, the camera slowly orbits the
+    // bulb once the user's hands are off (touch() in the handlers below
+    // pauses the drift for a grace window).
+    if (s.mode === 'mandelbulb' && !paused && !reduced && s.anim > 0) {
+      Camera.autoOrbit(dt, now);
+    }
     Ambient.tick(dt);
     adaptQuality(dt, now, a11y);
     const params = {
@@ -2058,6 +2064,7 @@ const App = (() => {
     Interaction.register({
       onPan: (dx, dy) => {
         if (State.get().mode === 'mandelbulb') {
+          Camera.touch();
           Camera.rotate3d(dx * 0.01);
         } else {
           Camera.pan(dx, dy);
@@ -2066,6 +2073,7 @@ const App = (() => {
       },
       onZoom: (factor, x, y) => {
         if (State.get().mode === 'mandelbulb') {
+          Camera.touch();
           Camera.setOrbitRadius(Camera.getOrbitRadius() / factor);
         } else {
           Camera.zoomAt(factor, x, y);
@@ -2074,6 +2082,7 @@ const App = (() => {
       },
       onFocus: (x, y) => {
         if (State.get().mode === 'mandelbulb') {
+          Camera.touch();
           Camera.setAngle(0);
           Camera.setOrbitRadius(3.0);
         } else {
