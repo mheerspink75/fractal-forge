@@ -450,7 +450,8 @@ const Engine = (() => {
     NEURAL_BLOOM: Shaders.NEURAL_BLOOM,
     QUANTUM_FIELD: Shaders.QUANTUM_FIELD,
     MANDELBULB: Shaders.MANDELBULB,
-    FRACTAL_TREE: Shaders.FRACTAL_TREE
+    FRACTAL_TREE: Shaders.FRACTAL_TREE,
+    POWER_BULB: Shaders.POWER_BULB
   };
 
   function getProgram(name) {
@@ -548,7 +549,7 @@ const Engine = (() => {
     GL.setUniform('u_high_contrast', params.highContrast, prog);
 
     // Mode-specific uniforms.
-    if (mode.shader === 'MANDELBULB') {
+    if (mode.shader === 'MANDELBULB' || mode.shader === 'POWER_BULB') {
       GL.setUniform('u_cam_pos', params.camPos, prog);
       GL.setUniform('u_cam_target', params.camTarget, prog);
       GL.setUniform('u_power', params.power, prog);
@@ -1998,17 +1999,15 @@ const App = (() => {
     ColorSystem.state.cycling = reduced ? false : !!s.cycling;
     if (!reduced) ColorSystem.tick(dt);
     autoGrowTick(dt, paused, reduced);
-    // Phase 4/5a: while a 3D mode animates, the camera slowly orbits the
+    // Phase 4/5a/5b: while a 3D mode animates, the camera slowly orbits the
     // subject once the user's hands are off (touch() in the handlers below
     // pauses the drift for a grace window). This gives the 3D views a stable,
     // always-present motion cue (the sway/breathing is layered on top).
-    if (
-      (s.mode === 'mandelbulb' || s.mode === 'fractalTree3d') &&
-      !paused &&
-      !reduced &&
-      s.anim > 0
-    ) {
-      Camera.autoOrbit(dt, now);
+    // Gated on the mode KIND so every gpu3d mode (Mandelbulb, Fractal Tree,
+    // Power Bulb) inherits it automatically.
+    const m3d = Fractals.get(s.mode);
+    if (m3d && m3d.kind === 'gpu3d' && !paused && !reduced && s.anim > 0) {
+      Camera.autoOrbit(now);
     }
     Ambient.tick(dt);
     adaptQuality(dt, now, a11y);
@@ -2192,6 +2191,8 @@ globalThis.App = App;
 globalThis.State = State;
 globalThis.UI = UI;
 globalThis.Exporter = Exporter;
+globalThis.Camera = Camera;
+globalThis.A11y = A11y;
 
 // Re-exported for src/exporter.js and src/ui.js (circular imports; used
 // at call time only).

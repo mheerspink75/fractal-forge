@@ -31,7 +31,7 @@ exactly from a short share code.
 | **Classic** | Mandelbrot (deep zoom, smooth escape coloring) · Julia Set · Burning Ship · Newton fractals · Sierpinski |
 | **Experimental** | Cosmic Nebula · Dreamscape · Neural Bloom · Quantum Field — original procedural modes that generate a unique composition every time |
 | **Structural** | Koch Snowflake · Dragon Curve · Fractal Tree · Plant Growth (L-systems) |
-| **3D** | Mandelbulb — real-time raymarched distance-estimation fractal with orbit camera · Fractal Tree 3D — raymarched self-similar I-tree that grows into being (Growth slider) and sways with the animation clock |
+| **3D** | Mandelbulb — real-time raymarched distance-estimation fractal with orbit camera · Fractal Tree 3D — raymarched self-similar I-tree that grows into being (Growth slider) and sways with the animation clock · Power Bulb — the z^p powerfractal family (default p=3, adjustable exponent) with the same orbit camera |
 
 ### Interaction
 - **Deep zoom** (the zoom scale caps at 10⁹×) with smooth, continuous escape coloring. The math is 32-bit `highp float`, so very deep zooms show the familiar deep-zoom precision artifacts rather than lossless detail — **drag to pan**, **double-click to focus**
@@ -53,8 +53,10 @@ brightness · a drifting ambient particle field behind the render. The scene nev
 The **Mandelbulb** mode raymarches a true 3D fractal in real time with a smooth orbit camera and
 adjustable power exponent (which "breathes" with the clock while animating). The **Fractal Tree 3D**
 mode raymarches a self-similar branching tree: drag the **Growth** slider to draw more of the canopy,
-and the whole tree gently sways with the animation clock. Drag to orbit either 3D view; while a
-3D mode is animating it also auto-drifts around the subject once your hands are off.
+and the whole tree gently sways with the animation clock. The **Power Bulb** mode raymarches the
+z^p powerfractal family (a third 3D cousin of the Mandelbrot set): the **Power** slider sets the
+exponent (default 3), which also "breathes" with the clock while animating. Drag to orbit any 3D
+view; while a 3D mode is animating it also auto-drifts around the subject once your hands are off.
 
 ### Gallery & persistence
 - **Save Artwork** — capture the current composition (a thumbnail plus the full parameter set)
@@ -179,6 +181,7 @@ python -m http.server 8000
 ### Mode-specific controls
 The left panel shows a context-sensitive control block for the active mode:
 - **Mandelbulb** — **Power** slider (2–16) and a **Reset camera** button; drag to orbit the 3D view.
+- **Power Bulb** — **Power** slider (2–16, default 3) and a **Reset camera** button; drag to orbit the 3D view.
 - **Fractal Tree 3D** — **Growth** slider (0–100%) that draws more of the canopy, plus a **Reset camera** button; drag to orbit the 3D view.
 - **L-systems** (Koch, Dragon, Tree, Plant) — **Growth** slider (0–100%) that animates the structure drawing itself.
 - **Julia Set** — **Drift** slider that moves the Julia constant for a continuously evolving set.
@@ -237,11 +240,11 @@ explicit function calls.
 | `GL` | WebGL context, shader/program compilation, FBOs, fullscreen-quad rendering |
 | `Shaders` | All GLSL: 11 fractal fragment shaders + 5 post-processing passes |
 | `ColorSystem` | 9 IQ cosine palettes, gradient editor, animated cycling, CPU sampling |
-| `Fractals` | 15-mode registry with per-mode parameter sets and grouping |
+| `Fractals` | 16-mode registry with per-mode parameter sets and grouping |
 | `Engine` | Lazy program compilation, uniform binding, fractal + L-system rendering |
 | `LSystem` | Koch / Dragon / Tree / Plant — string rewriting + turtle graphics |
 | `Effects` | Post pipeline: bright pass → separable blur → composite → feedback trails |
-| `Camera` | Pan / zoom / deep-zoom, 3D orbit for the 3D modes (Mandelbulb, Fractal Tree 3D) |
+| `Camera` | Pan / zoom / deep-zoom, 3D orbit for the 3D modes (Mandelbulb, Fractal Tree 3D, Power Bulb) |
 | `Interaction` | Mouse, touch, and keyboard input |
 | `State` | Single source of truth for render parameters |
 | `Procedural` | Seed-based randomize, mutate, and parameter blending |
@@ -328,7 +331,7 @@ This runs three suites:
 The Node suite can't run WebGL, so `test/browser.js` drives real headless Chromium
 (Playwright + software WebGL via SwiftShader) and verifies the checks only a real browser can:
 
-- **D3** — the seed drives **every** GPU mode (all 11 modes render a valid frame and change
+- **D3** — the seed drives **every** GPU mode (all 12 modes render a valid frame and change
   composition when the seed changes),
 - **D4** — export matches the on-screen composition at **live** animation time (not `time = 0`),
 - **D10** — action keys are inert behind an open modal, while pan/zoom/space still work,

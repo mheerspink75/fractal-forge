@@ -584,8 +584,8 @@ export const UI = (() => {
       body.appendChild(btn);
     };
 
-    if (mode.shader === 'MANDELBULB') {
-      title.textContent = 'Mandelbulb';
+    if (mode.shader === 'MANDELBULB' || mode.shader === 'POWER_BULB') {
+      title.textContent = mode.label;
       addSlider(
         'ms-power',
         'Power',
@@ -598,8 +598,8 @@ export const UI = (() => {
       );
       addButton('ms-reset-cam', 'Reset camera', () => {
         Camera.setAngle(0);
-        Camera.setOrbitRadius(3.0);
-        State.set({ camAngle: 0, orbitRadius: 3.0 });
+        Camera.setOrbitRadius(mode.orbitRadius || 3.0);
+        State.set({ camAngle: 0, orbitRadius: mode.orbitRadius || 3.0 });
       });
     } else if (mode.shader === 'FRACTAL_TREE') {
       title.textContent = mode.label;

@@ -533,6 +533,100 @@ export const Shaders = (() => {
     }
   `;
 
+  /* ---------------- 3D Power Bulb (z^p powerfractal, raymarched) ---------------- */
+  // The z^p 3D powerfractal family: a 3D extension of z -> z^p + c in which the
+  // polar angle is preserved and the azimuth is multiplied by p (the
+  // Mandelbulb multiplies both angles). At integer p the set carries the
+  // classic p-fold spiky silhouette (p=3 is the default). Same raymarching
+  // scheme as the Mandelbulb, with the same motion contract:
+  //   u_power   — the exponent (per-mode default; slider 2..16)
+  //   u_time/u_anim — the Phase-4 "breathing exponent" (identity at u_time=0)
+  //   u_seed    — a bounded in-DE offset (D3: the seed reshapes the
+  //               composition) plus the shared camera orbit
+  const POWER_BULB =
+    COMMON +
+    `
+    uniform vec3 u_cam_pos;
+    uniform vec3 u_cam_target;
+    uniform float u_power;
+
+    float powerBulbDE(vec3 pos, float pw) {
+      // Bounded seed-driven offset (D3): its DIRECTION rotates with u_seed and
+      // breaks the shape's p-fold symmetry, so ANY seed change moves the
+      // composition (a pure camera orbit could cancel at a symmetric angle).
+      // The magnitude stays small so the subject remains comfortably in frame.
+      float oa = 1.7 * u_seed;
+      vec3 z = pos + vec3(sin(oa) * 0.12, 0.0, cos(oa) * 0.12);
+      float dr = 1.0;
+      float r = 0.0;
+      const float EPS = 1e-6;
+      for (int i = 0; i < 12; i++) {
+        r = length(z);
+        if (r > 2.0) break;
+        if (r < EPS) r = EPS;   // guard division by zero and log(0)
+        float theta = acos(clamp(z.z / r, -1.0, 1.0));
+        float phi = atan(z.y, z.x) * pw;
+        float zr = pow(r, pw);
+        dr = pow(r, pw - 1.0) * pw * dr + 1.0;
+        z = zr * vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)) + pos;
+      }
+      r = max(r, EPS);
+      dr = max(dr, EPS);
+      return 0.5 * log(r) * r / dr;
+    }
+
+    void main() {
+      // The seed orbits the camera AROUND the bulb (u_cam_target) about the
+      // vertical axis, so the bulb always fills the frame and the seed changes
+      // which side is seen (same framing scheme as the Mandelbulb).
+      vec3 rel = u_cam_pos - u_cam_target;
+      float sa = 0.4 * u_seed;
+      float cs = cos(sa), sn = sin(sa);
+      vec3 ro = u_cam_target + vec3(rel.x * cs + rel.z * sn, rel.y, -rel.x * sn + rel.z * cs);
+      vec3 ww = normalize(u_cam_target - ro);
+      vec3 uu = normalize(cross(ww, vec3(0.0, 1.0, 0.0)));
+      vec3 vv = cross(uu, ww);
+      vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
+      vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.6 * ww);
+
+      float t = 0.0;
+      float dist = 1e9;
+      vec3 pos = ro;
+      // Animation = the Phase-4 "breathing powerfractal" move: the power
+      // oscillates with the clock. At u_anim = 0 (or u_time = 0) this is the
+      // pure z^power shape, so paused/shared frames and golden baselines stay
+      // static.
+      float power_eff = u_power + 0.5 * u_anim * sin(u_time * 0.1);
+      for (int i = 0; i < 160; i++) {
+        pos = ro + rd * t;
+        dist = powerBulbDE(pos, power_eff);
+        if (dist < 0.0) dist = 0.0;   // guard against negative/NaN estimates
+        t += min(dist, 0.5) * 0.85;  // cap the step to avoid tunneling
+        if (t > 24.0 || dist < 0.0006) break;
+      }
+
+      vec3 col;
+      if (dist < 0.0006) {
+        vec2 e = vec2(1e-4, 0.0);
+        vec3 n = normalize(vec3(
+          powerBulbDE(pos + e.xyy, power_eff) - powerBulbDE(pos - e.xyy, power_eff),
+          powerBulbDE(pos + e.yxy, power_eff) - powerBulbDE(pos - e.yxy, power_eff),
+          powerBulbDE(pos + e.yyx, power_eff) - powerBulbDE(pos - e.yyx, power_eff)
+        ));
+        vec3 lightDir = normalize(vec3(0.5, 0.8, -0.6));
+        float diff = max(dot(n, lightDir), 0.0);
+        float spec = pow(max(dot(reflect(-lightDir, n), rd), 0.0), 32.0);
+        float fresnel = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
+        vec3 base = palette(length(pos) * 0.6 + u_palette_phase);
+        col = base * (0.18 + diff * 0.95) + spec * 0.6 + fresnel * base * 0.6;
+      } else {
+        col = vec3(0.015, 0.02, 0.04);
+      }
+      col *= 1.0 + u_audio.x * 0.3;
+      gl_FragColor = vec4(applyContrast(col), 1.0);
+    }
+  `;
+
   /* ---------------- Post-processing passes ---------------- */
 
   const POST_HEADER = `
@@ -675,6 +769,7 @@ export const Shaders = (() => {
     QUANTUM_FIELD,
     MANDELBULB,
     FRACTAL_TREE,
+    POWER_BULB,
     BRIGHT_PASS,
     BLUR,
     COMPOSITE,
