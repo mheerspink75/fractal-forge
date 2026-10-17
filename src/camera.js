@@ -102,9 +102,25 @@ export const Camera = (() => {
 
   // Advances the orbit when the view is idle. Safe no-op when the user is
   // actively driving the camera.
-  function autoOrbit(dt, now) {
-    if (now - lastTouch <= AUTO_ORBIT_IDLE_MS) return;
-    camAngle += AUTO_ORBIT_RATE * dt;
+  //
+  // The drift is driven by REAL elapsed time (the rAF timestamps), not the
+  // loop's dt: the loop caps dt (anti time-jump), which would slow the camera
+  // to a crawl on low-fps machines (software GL / CI) where each tick is
+  // seconds apart. Real-time drift keeps the "slow constant rate" promise
+  // there; on a 60fps machine the per-tick step is identical to the old
+  // dt-based step, so shipped motion is unchanged.
+  const AUTO_ORBIT_MAX_GAP_MS = 60000; // longer gaps = suspend/re-enable: no jump
+  let lastOrbitNow = null;
+
+  function autoOrbit(now) {
+    if (now - lastTouch <= AUTO_ORBIT_IDLE_MS) {
+      lastOrbitNow = null; // re-baseline on the next enabled tick (grace window)
+      return;
+    }
+    if (lastOrbitNow != null && now - lastOrbitNow <= AUTO_ORBIT_MAX_GAP_MS) {
+      camAngle += (AUTO_ORBIT_RATE * (now - lastOrbitNow)) / 1000;
+    }
+    lastOrbitNow = now;
     applyOrbit();
   }
 

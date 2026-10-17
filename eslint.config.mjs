@@ -24,7 +24,9 @@ export default [
         App: 'readonly',
         State: 'readonly',
         UI: 'readonly',
-        Exporter: 'readonly'
+        Exporter: 'readonly',
+        Camera: 'readonly',
+        A11y: 'readonly'
       }
     },
     rules: { ...js.configs.recommended.rules, 'no-unused-vars': noUnused }

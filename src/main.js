@@ -2007,7 +2007,7 @@ const App = (() => {
     // Power Bulb) inherits it automatically.
     const m3d = Fractals.get(s.mode);
     if (m3d && m3d.kind === 'gpu3d' && !paused && !reduced && s.anim > 0) {
-      Camera.autoOrbit(dt, now);
+      Camera.autoOrbit(now);
     }
     Ambient.tick(dt);
     adaptQuality(dt, now, a11y);
@@ -2191,6 +2191,8 @@ globalThis.App = App;
 globalThis.State = State;
 globalThis.UI = UI;
 globalThis.Exporter = Exporter;
+globalThis.Camera = Camera;
+globalThis.A11y = A11y;
 
 // Re-exported for src/exporter.js and src/ui.js (circular imports; used
 // at call time only).

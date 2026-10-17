@@ -785,14 +785,22 @@ async function runTarget(name, url, evidenceBase) {
     // captures taken ~2.5s apart (auto-orbit drifts ~7deg over that window).
     await page.evaluate(() => State.set({ anim: 1.0 }));
     await page.waitForTimeout(300);
+    const p4dA = await page.evaluate(() => ({ t: App.getLiveTime(), a: Camera.getAngle() }));
     const p4a1 = await capture(page, evidenceDir, 'p4-alive-a');
     await page.waitForTimeout(2500);
     const p4a2 = await capture(page, evidenceDir, 'p4-alive-b');
+    const p4dB = await page.evaluate(() => ({ t: App.getLiveTime(), a: Camera.getAngle() }));
     const aliveMAE = mae(downsample(decode(p4a1), GRID), downsample(decode(p4a2), GRID));
     ok(
       'Phase 4 animating: the frame moves over time (breathing + auto-orbit)',
       aliveMAE > 0.8 && isValidFrame(decode(p4a1)) && isValidFrame(decode(p4a2)),
-      'MAE=' + aliveMAE.toFixed(3) + ' (floor 0.8, jitter ~0.3)'
+      'MAE=' +
+        aliveMAE.toFixed(3) +
+        ' (floor 0.8, jitter ~0.3) clock Δ=' +
+        (p4dB.t - p4dA.t).toFixed(2) +
+        's camAngle Δ=' +
+        (p4dB.a - p4dA.a).toFixed(4) +
+        ' rad'
     );
 
     // FROZEN: anim off -> pure z^power, no orbit -> the frame is static, so two
@@ -834,14 +842,22 @@ async function runTarget(name, url, evidenceBase) {
     // anim=0 below freezes both.
     await page.evaluate(() => State.set({ anim: 1.0, growth: 1.0, seed: 1 }));
     await page.waitForTimeout(300);
+    const t5dA = await page.evaluate(() => ({ t: App.getLiveTime(), a: Camera.getAngle() }));
     const t5a1 = await capture(page, evidenceDir, 'p5a-alive-a');
     await page.waitForTimeout(3000);
     const t5a2 = await capture(page, evidenceDir, 'p5a-alive-b');
+    const t5dB = await page.evaluate(() => ({ t: App.getLiveTime(), a: Camera.getAngle() }));
     const t5alive = mae(downsample(decode(t5a1), GRID), downsample(decode(t5a2), GRID));
     ok(
       'Phase 5a animating: the tree moves over time (auto-orbit + sway, anim=1)',
       t5alive > 0.3 && isValidFrame(decode(t5a1)) && isValidFrame(decode(t5a2)),
-      'MAE=' + t5alive.toFixed(3) + ' (floor 0.3)'
+      'MAE=' +
+        t5alive.toFixed(3) +
+        ' (floor 0.3) clock Δ=' +
+        (t5dB.t - t5dA.t).toFixed(2) +
+        's camAngle Δ=' +
+        (t5dB.a - t5dA.a).toFixed(4) +
+        ' rad'
     );
 
     // FROZEN: anim off -> no sway -> the frame is static, so two captures agree.
@@ -899,16 +915,45 @@ async function runTarget(name, url, evidenceBase) {
     // SwiftShader machines the per-tick dt cap means the camera accumulates
     // its drift over wall-clock time, so the near-symmetric p=3 silhouette
     // needs a longer window than the spiky bulb to move measurably at 64x64.
+    // The auto-orbit itself drifts in REAL time (see Camera.autoOrbit), so
+    // any tick landing inside the window produces a visible silhouette shift;
+    // retry up to 3 windows in case a whole window is starved of ticks.
     await page.evaluate(() => State.set({ anim: 1.0, seed: 1 }));
     await page.waitForTimeout(300);
-    const pba1 = await capture(page, evidenceDir, 'p5b-alive-a');
-    await page.waitForTimeout(8000);
-    const pba2 = await capture(page, evidenceDir, 'p5b-alive-b');
-    const pbAlive = mae(downsample(decode(pba1), GRID), downsample(decode(pba2), GRID));
+    let pbAlive = 0,
+      pbA = null,
+      pbB = null,
+      pbDiag = '';
+    for (let i = 0; i < 3; i++) {
+      const dA = await page.evaluate(() => ({
+        t: App.getLiveTime(),
+        a: Camera.getAngle(),
+        reduced: A11y.get().reducedMotion
+      }));
+      const f1 = await capture(page, evidenceDir, 'p5b-alive-a' + i);
+      await page.waitForTimeout(8000);
+      const f2 = await capture(page, evidenceDir, 'p5b-alive-b' + i);
+      const dB = await page.evaluate(() => ({
+        t: App.getLiveTime(),
+        a: Camera.getAngle(),
+        reduced: A11y.get().reducedMotion
+      }));
+      pbA = f1;
+      pbB = f2;
+      pbAlive = mae(downsample(decode(f1), GRID), downsample(decode(f2), GRID));
+      pbDiag =
+        'clock Δ=' +
+        (dB.t - dA.t).toFixed(2) +
+        's camAngle Δ=' +
+        (dB.a - dA.a).toFixed(4) +
+        ' rad reduced=' +
+        dB.reduced;
+      if (pbAlive > 0.3 && isValidFrame(decode(f1)) && isValidFrame(decode(f2))) break;
+    }
     ok(
       'Phase 5b animating: the bulb moves over time (auto-orbit + breathing, anim=1)',
-      pbAlive > 0.3 && isValidFrame(decode(pba1)) && isValidFrame(decode(pba2)),
-      'MAE=' + pbAlive.toFixed(3) + ' (floor 0.3)'
+      pbAlive > 0.3 && isValidFrame(decode(pbA)) && isValidFrame(decode(pbB)),
+      'MAE=' + pbAlive.toFixed(3) + ' (floor 0.3) ' + pbDiag
     );
 
     // FROZEN: anim off -> no breathing, no orbit -> the frame is static.
