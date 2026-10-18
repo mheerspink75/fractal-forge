@@ -130,7 +130,10 @@ export const Fractals = (() => {
       center: [0.0, 0.0],
       span: 2.0,
       iterations: 256,
-      power: 8
+      power: 8,
+      // Standard 3D framing (declared explicitly so all gpu3d modes carry a
+      // framing default for Camera.reset / the mode panel).
+      orbitRadius: 3.0
     },
     fractalTree3d: {
       label: 'Fractal Tree 3D',

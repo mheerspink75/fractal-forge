@@ -56,7 +56,9 @@ mode raymarches a self-similar branching tree: drag the **Growth** slider to dra
 and the whole tree gently sways with the animation clock. The **Power Bulb** mode raymarches the
 z^p powerfractal family (a third 3D cousin of the Mandelbrot set): the **Power** slider sets the
 exponent (default 3), which also "breathes" with the clock while animating. Drag to orbit any 3D
-view; while a 3D mode is animating it also auto-drifts around the subject once your hands are off.
+view — horizontally to spin around the subject, vertically to pitch the camera up or down (±~60°);
+double-click restores the mode's default framing. While a 3D mode is animating it also
+auto-drifts around the subject once your hands are off.
 
 ### Gallery & persistence
 - **Save Artwork** — capture the current composition (a thumbnail plus the full parameter set)
@@ -336,8 +338,8 @@ The Node suite can't run WebGL, so `test/browser.js` drives real headless Chromi
 - **D4** — export matches the on-screen composition at **live** animation time (not `time = 0`),
 - **D10** — action keys are inert behind an open modal, while pan/zoom/space still work,
 - **Share URL** — a linkable world (`?fractal=…&seed=…&palette=…&time=…&iterations=…`, plus
-  `clock=…` when paused on a moment) restores its exact state and renders a valid frame, and junk
-  links fall back to defaults,
+  `clock=…` when paused on a moment and `pitch=…` for the 3D camera) restores its exact state and
+  renders a valid frame, and junk links (incl. a bad `pitch`) fall back to defaults,
 - **Clock URL** — pausing writes `clock=<t>` into the address bar and resuming removes it, and two
   fresh loads of the same `clock=` link render near-identical frames (determinism of the paused moment),
 - **Golden image** — a canonical scene matches a committed 64×64 pixel baseline within a tight
