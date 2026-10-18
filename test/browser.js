@@ -49,7 +49,8 @@ const GPU_MODES = [
   'neuralBloom',
   'quantumField',
   'mandelbulb',
-  'fractalTree3d'
+  'fractalTree3d',
+  'powerBulb'
 ];
 const TIME_MODE = 'dreamscape'; // uses u_time -> composition changes over time
 const ACTION_KEYS = ['r', 'n', 's', 'e', 'g', 'a', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
@@ -223,6 +224,23 @@ async function getExportBuffer(page) {
   }
 }
 
+// Confirm the app is *running* (not paused) before an "alive" capture.
+// Reads the actual pause flag via App.isPaused() rather than inferring pause
+// from a clock delta: on a starved slow runner a *running* app can show no
+// clock movement over a short window, and inferring "paused" from that would
+// wrongly togglePause() a running app — freezing the very window under test.
+// (Verified regression: Phase 5b alive flaked on CI with clock Δ=0.00s because
+// a running app looked frozen and the old heuristic paused it.)
+async function ensureRunning(page) {
+  for (let i = 0; i < 3; i++) {
+    const paused = await page.evaluate(() => App.isPaused());
+    if (!paused) return true;
+    await page.evaluate(() => App.togglePause()); // resume a genuinely-paused app
+    await page.waitForTimeout(200);
+  }
+  return !(await page.evaluate(() => App.isPaused()));
+}
+
 async function runTarget(name, url, evidenceBase) {
   console.log('\n=== Target: ' + name + '  \u2014  ' + url + ' ===');
   const browser = await chromium.launch({ headless: true, args: LAUNCH_ARGS });
@@ -273,9 +291,11 @@ async function runTarget(name, url, evidenceBase) {
       State.set({ cycling: false, trails: 0 });
     });
     for (const id of GPU_MODES) {
-      // The 3D raymarched modes (Mandelbulb, Fractal Tree) are heavy under
-      // software GL and need a longer settle before their frame is complete.
-      const settle = id === 'mandelbulb' || id === 'fractalTree3d' ? 2500 : 900;
+      // The 3D raymarched modes (Mandelbulb, Fractal Tree, Power Bulb) are
+      // heavy under software GL and need a longer settle before their frame is
+      // complete.
+      const settle =
+        id === 'mandelbulb' || id === 'fractalTree3d' || id === 'powerBulb' ? 2500 : 900;
       await page.evaluate((mid) => App.setMode(mid), id);
       await page.waitForTimeout(settle);
       const seedBefore = await page.evaluate(() => State.get().seed);
@@ -316,7 +336,8 @@ async function runTarget(name, url, evidenceBase) {
     console.log('\n-- In-frame: all GPU modes render at 2 fresh seeds --');
     const IN_FRAME_SEEDS = [1, 1597334671]; // distinct from the D3 seed sequence
     for (const id of GPU_MODES) {
-      const settle = id === 'mandelbulb' || id === 'fractalTree3d' ? 2500 : 900;
+      const settle =
+        id === 'mandelbulb' || id === 'fractalTree3d' || id === 'powerBulb' ? 2500 : 900;
       for (const seed of IN_FRAME_SEEDS) {
         await page.evaluate((mid) => App.setMode(mid), id);
         await page.evaluate((s) => State.set({ seed: s >>> 0 }), seed);
@@ -765,12 +786,10 @@ async function runTarget(name, url, evidenceBase) {
     // are switched off in both cases so the ONLY time-driven signal is the
     // animation term (power_eff + auto-orbit), which is exactly what we test.
     console.log('\n-- Phase 4: Mandelbulb animates (breathing + auto-orbit) --');
-    // Defensive: guarantee the app is running (time advancing) so the
-    // "alive" case is a fair test. Mirrors the Clock section's resume logic.
-    const p4tA = await page.evaluate(() => App.getLiveTime());
-    await page.waitForTimeout(400);
-    const p4tB = await page.evaluate(() => App.getLiveTime());
-    if (p4tB === p4tA) await page.evaluate(() => App.togglePause()); // was paused -> resume
+    // Defensive: guarantee the app is *running* (not paused) so the "alive"
+    // case is a fair test. Reads the pause flag directly (robust to a starved
+    // slow runner where a running app looks frozen).
+    await ensureRunning(page);
     await page.evaluate(() => {
       App.setMode('mandelbulb');
       State.set({ cycling: false, trails: 0 });
@@ -781,14 +800,22 @@ async function runTarget(name, url, evidenceBase) {
     // captures taken ~2.5s apart (auto-orbit drifts ~7deg over that window).
     await page.evaluate(() => State.set({ anim: 1.0 }));
     await page.waitForTimeout(300);
+    const p4dA = await page.evaluate(() => ({ t: App.getLiveTime(), a: Camera.getAngle() }));
     const p4a1 = await capture(page, evidenceDir, 'p4-alive-a');
     await page.waitForTimeout(2500);
     const p4a2 = await capture(page, evidenceDir, 'p4-alive-b');
+    const p4dB = await page.evaluate(() => ({ t: App.getLiveTime(), a: Camera.getAngle() }));
     const aliveMAE = mae(downsample(decode(p4a1), GRID), downsample(decode(p4a2), GRID));
     ok(
       'Phase 4 animating: the frame moves over time (breathing + auto-orbit)',
       aliveMAE > 0.8 && isValidFrame(decode(p4a1)) && isValidFrame(decode(p4a2)),
-      'MAE=' + aliveMAE.toFixed(3) + ' (floor 0.8, jitter ~0.3)'
+      'MAE=' +
+        aliveMAE.toFixed(3) +
+        ' (floor 0.8, jitter ~0.3) clock Δ=' +
+        (p4dB.t - p4dA.t).toFixed(2) +
+        's camAngle Δ=' +
+        (p4dB.a - p4dA.a).toFixed(4) +
+        ' rad'
     );
 
     // FROZEN: anim off -> pure z^power, no orbit -> the frame is static, so two
@@ -812,12 +839,9 @@ async function runTarget(name, url, evidenceBase) {
     // freeze it (paused/shared/golden-safe). Cycling/trails off so the only
     // time-driven signal is the sway — exactly what the "alive" check tests.
     console.log('\n-- Phase 5a: Fractal Tree 3D (sway + growth) --');
-    // Defensive: guarantee the app is running (time advancing) so the "alive"
-    // case is a fair test. Mirrors the Phase 4 / Clock resume logic.
-    const t5tA = await page.evaluate(() => App.getLiveTime());
-    await page.waitForTimeout(400);
-    const t5tB = await page.evaluate(() => App.getLiveTime());
-    if (t5tB === t5tA) await page.evaluate(() => App.togglePause()); // was paused -> resume
+    // Defensive: guarantee the app is *running* (not paused) so the "alive"
+    // case is a fair test (pause-flag read, robust to a starved slow runner).
+    await ensureRunning(page);
     await page.evaluate(() => {
       App.setMode('fractalTree3d');
       State.set({ cycling: false, trails: 0 });
@@ -830,14 +854,22 @@ async function runTarget(name, url, evidenceBase) {
     // anim=0 below freezes both.
     await page.evaluate(() => State.set({ anim: 1.0, growth: 1.0, seed: 1 }));
     await page.waitForTimeout(300);
+    const t5dA = await page.evaluate(() => ({ t: App.getLiveTime(), a: Camera.getAngle() }));
     const t5a1 = await capture(page, evidenceDir, 'p5a-alive-a');
     await page.waitForTimeout(3000);
     const t5a2 = await capture(page, evidenceDir, 'p5a-alive-b');
+    const t5dB = await page.evaluate(() => ({ t: App.getLiveTime(), a: Camera.getAngle() }));
     const t5alive = mae(downsample(decode(t5a1), GRID), downsample(decode(t5a2), GRID));
     ok(
       'Phase 5a animating: the tree moves over time (auto-orbit + sway, anim=1)',
       t5alive > 0.3 && isValidFrame(decode(t5a1)) && isValidFrame(decode(t5a2)),
-      'MAE=' + t5alive.toFixed(3) + ' (floor 0.3)'
+      'MAE=' +
+        t5alive.toFixed(3) +
+        ' (floor 0.3) clock Δ=' +
+        (t5dB.t - t5dA.t).toFixed(2) +
+        's camAngle Δ=' +
+        (t5dB.a - t5dA.a).toFixed(4) +
+        ' rad'
     );
 
     // FROZEN: anim off -> no sway -> the frame is static, so two captures agree.
@@ -869,6 +901,99 @@ async function runTarget(name, url, evidenceBase) {
       'MAE=' + t5growth.toFixed(3) + ' (floor 0.25)'
     );
     await page.evaluate(() => State.set({ growth: 1.0, anim: 0.5 })); // restore
+
+    // ---------- Phase 5b: Power Bulb (z^p powerfractal: breathing + power) ----------
+    // The third 3D mode: the z^p powerfractal family (p=3 default). It animates
+    // two ways, like the Mandelbulb: a monotonic camera auto-orbit while
+    // animating (the stable "alive" signal) plus the Phase-4 breathing exponent
+    // (u_time-driven, identity at t=0). The Power slider drives the exponent
+    // (3 default -> 8 perturbed is a genuinely different composition). anim=0
+    // must freeze everything (paused/shared/golden-safe).
+    console.log('\n-- Phase 5b: Power Bulb (breathing + auto-orbit + power) --');
+    // Defensive: guarantee the app is *running* (not paused) so the "alive"
+    // case is a fair test (pause-flag read, robust to a starved slow runner).
+    await ensureRunning(page);
+    await page.evaluate(() => {
+      App.setMode('powerBulb');
+      State.set({ cycling: false, trails: 0 });
+    });
+    await page.waitForTimeout(2500); // settle the raymarch (heavy under software GL)
+
+    // ALIVE: anim on -> auto-orbit (monotonic) + breathing exponent move the
+    // frame between two captures. The gap is generous on purpose: on slow
+    // SwiftShader machines the per-tick dt cap means the camera accumulates
+    // its drift over wall-clock time, so the near-symmetric p=3 silhouette
+    // needs a longer window than the spiky bulb to move measurably at 64x64.
+    // The auto-orbit itself drifts in REAL time (see Camera.autoOrbit), so
+    // any tick landing inside the window produces a visible silhouette shift;
+    // retry up to 3 windows in case a whole window is starved of ticks.
+    await page.evaluate(() => State.set({ anim: 1.0, seed: 1 }));
+    await page.waitForTimeout(300);
+    let pbAlive = 0,
+      pbA = null,
+      pbB = null,
+      pbDiag = '';
+    for (let i = 0; i < 3; i++) {
+      await ensureRunning(page); // re-confirm running each window (recover any pause)
+      const dA = await page.evaluate(() => ({
+        t: App.getLiveTime(),
+        a: Camera.getAngle(),
+        reduced: A11y.get().reducedMotion
+      }));
+      const f1 = await capture(page, evidenceDir, 'p5b-alive-a' + i);
+      await page.waitForTimeout(8000);
+      const f2 = await capture(page, evidenceDir, 'p5b-alive-b' + i);
+      const dB = await page.evaluate(() => ({
+        t: App.getLiveTime(),
+        a: Camera.getAngle(),
+        reduced: A11y.get().reducedMotion
+      }));
+      pbA = f1;
+      pbB = f2;
+      pbAlive = mae(downsample(decode(f1), GRID), downsample(decode(f2), GRID));
+      pbDiag =
+        'clock Δ=' +
+        (dB.t - dA.t).toFixed(2) +
+        's camAngle Δ=' +
+        (dB.a - dA.a).toFixed(4) +
+        ' rad reduced=' +
+        dB.reduced;
+      if (pbAlive > 0.3 && isValidFrame(decode(f1)) && isValidFrame(decode(f2))) break;
+    }
+    ok(
+      'Phase 5b animating: the bulb moves over time (auto-orbit + breathing, anim=1)',
+      pbAlive > 0.3 && isValidFrame(decode(pbA)) && isValidFrame(decode(pbB)),
+      'MAE=' + pbAlive.toFixed(3) + ' (floor 0.3) ' + pbDiag
+    );
+
+    // FROZEN: anim off -> no breathing, no orbit -> the frame is static.
+    await page.evaluate(() => State.set({ anim: 0 }));
+    await page.waitForTimeout(600);
+    const pbf1 = await capture(page, evidenceDir, 'p5b-frozen-a');
+    await page.waitForTimeout(1500);
+    const pbf2 = await capture(page, evidenceDir, 'p5b-frozen-b');
+    const pbFrozen = mae(downsample(decode(pbf1), GRID), downsample(decode(pbf2), GRID));
+    ok(
+      'Phase 5b frozen: anim=0 renders a static, valid frame',
+      pbFrozen < 1.5 && isValidFrame(decode(pbf1)) && isValidFrame(decode(pbf2)),
+      'MAE=' + pbFrozen.toFixed(3) + ' (cap 1.5)'
+    );
+
+    // POWER: default exponent (3) vs a perturbed exponent (8) must be
+    // genuinely different compositions — the Power slider drives the DE. The
+    // floor sits well above fresh-render jitter (~0.15).
+    const pbPowDefault = await page.evaluate(() => State.get().power);
+    const pbp1 = await capture(page, evidenceDir, 'p5b-power-default');
+    await page.evaluate(() => State.set({ power: 8 }));
+    await page.waitForTimeout(1000);
+    const pbp2 = await capture(page, evidenceDir, 'p5b-power-perturbed');
+    const pbPower = mae(downsample(decode(pbp1), GRID), downsample(decode(pbp2), GRID));
+    ok(
+      'Phase 5b power: changing the exponent changes the composition (both valid)',
+      pbPower > 0.4 && isValidFrame(decode(pbp1)) && isValidFrame(decode(pbp2)),
+      'power ' + pbPowDefault + ' -> 8  MAE=' + pbPower.toFixed(3) + ' (floor 0.4)'
+    );
+    await page.evaluate(() => State.set({ anim: 0.5 })); // leave a sensible state
 
     // ---------- Golden image: pixel regression against the committed baseline ----------
     console.log('\n-- Golden image: pixel regression --');

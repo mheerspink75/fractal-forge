@@ -143,6 +143,19 @@ export const Fractals = (() => {
       // The tree is taller/narrower than the bulb; frame it a touch closer so
       // the canopy fills the view at both fresh seeds (In-frame requirement).
       orbitRadius: 2.4
+    },
+    powerBulb: {
+      label: 'Power Bulb',
+      group: '3d',
+      kind: 'gpu3d',
+      shader: 'POWER_BULB',
+      center: [0.0, 0.0],
+      span: 2.0,
+      iterations: 256,
+      // Classic bulb silhouette (p=3) is the default exponent; the Power
+      // slider (2–16) drives it. Framed at the standard 3D orbit radius.
+      power: 3,
+      orbitRadius: 3.0
     }
   };
 
@@ -161,7 +174,8 @@ export const Fractals = (() => {
     'tree',
     'plant',
     'mandelbulb',
-    'fractalTree3d'
+    'fractalTree3d',
+    'powerBulb'
   ];
 
   function get(id) {

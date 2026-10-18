@@ -217,7 +217,7 @@ console.log('--- ColorSystem ---');
 
 console.log('--- Fractals (mode registry completeness) ---');
 {
-  check('15 modes', M.Fractals.ORDER.length === 15);
+  check('16 modes', M.Fractals.ORDER.length === 16);
   const groups = new Set(M.Fractals.ORDER.map((id) => M.Fractals.get(id).group));
   check('4 groups', groups.size === 4);
   check(
