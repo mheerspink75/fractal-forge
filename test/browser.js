@@ -224,6 +224,23 @@ async function getExportBuffer(page) {
   }
 }
 
+// Confirm the app is *running* (not paused) before an "alive" capture.
+// Reads the actual pause flag via App.isPaused() rather than inferring pause
+// from a clock delta: on a starved slow runner a *running* app can show no
+// clock movement over a short window, and inferring "paused" from that would
+// wrongly togglePause() a running app — freezing the very window under test.
+// (Verified regression: Phase 5b alive flaked on CI with clock Δ=0.00s because
+// a running app looked frozen and the old heuristic paused it.)
+async function ensureRunning(page) {
+  for (let i = 0; i < 3; i++) {
+    const paused = await page.evaluate(() => App.isPaused());
+    if (!paused) return true;
+    await page.evaluate(() => App.togglePause()); // resume a genuinely-paused app
+    await page.waitForTimeout(200);
+  }
+  return !(await page.evaluate(() => App.isPaused()));
+}
+
 async function runTarget(name, url, evidenceBase) {
   console.log('\n=== Target: ' + name + '  \u2014  ' + url + ' ===');
   const browser = await chromium.launch({ headless: true, args: LAUNCH_ARGS });
@@ -769,12 +786,10 @@ async function runTarget(name, url, evidenceBase) {
     // are switched off in both cases so the ONLY time-driven signal is the
     // animation term (power_eff + auto-orbit), which is exactly what we test.
     console.log('\n-- Phase 4: Mandelbulb animates (breathing + auto-orbit) --');
-    // Defensive: guarantee the app is running (time advancing) so the
-    // "alive" case is a fair test. Mirrors the Clock section's resume logic.
-    const p4tA = await page.evaluate(() => App.getLiveTime());
-    await page.waitForTimeout(400);
-    const p4tB = await page.evaluate(() => App.getLiveTime());
-    if (p4tB === p4tA) await page.evaluate(() => App.togglePause()); // was paused -> resume
+    // Defensive: guarantee the app is *running* (not paused) so the "alive"
+    // case is a fair test. Reads the pause flag directly (robust to a starved
+    // slow runner where a running app looks frozen).
+    await ensureRunning(page);
     await page.evaluate(() => {
       App.setMode('mandelbulb');
       State.set({ cycling: false, trails: 0 });
@@ -824,12 +839,9 @@ async function runTarget(name, url, evidenceBase) {
     // freeze it (paused/shared/golden-safe). Cycling/trails off so the only
     // time-driven signal is the sway — exactly what the "alive" check tests.
     console.log('\n-- Phase 5a: Fractal Tree 3D (sway + growth) --');
-    // Defensive: guarantee the app is running (time advancing) so the "alive"
-    // case is a fair test. Mirrors the Phase 4 / Clock resume logic.
-    const t5tA = await page.evaluate(() => App.getLiveTime());
-    await page.waitForTimeout(400);
-    const t5tB = await page.evaluate(() => App.getLiveTime());
-    if (t5tB === t5tA) await page.evaluate(() => App.togglePause()); // was paused -> resume
+    // Defensive: guarantee the app is *running* (not paused) so the "alive"
+    // case is a fair test (pause-flag read, robust to a starved slow runner).
+    await ensureRunning(page);
     await page.evaluate(() => {
       App.setMode('fractalTree3d');
       State.set({ cycling: false, trails: 0 });
@@ -898,12 +910,9 @@ async function runTarget(name, url, evidenceBase) {
     // (3 default -> 8 perturbed is a genuinely different composition). anim=0
     // must freeze everything (paused/shared/golden-safe).
     console.log('\n-- Phase 5b: Power Bulb (breathing + auto-orbit + power) --');
-    // Defensive: guarantee the app is running (time advancing) so the "alive"
-    // case is a fair test. Mirrors the Phase 4 / 5a resume logic.
-    const pbtA = await page.evaluate(() => App.getLiveTime());
-    await page.waitForTimeout(400);
-    const pbtB = await page.evaluate(() => App.getLiveTime());
-    if (pbtB === pbtA) await page.evaluate(() => App.togglePause()); // was paused -> resume
+    // Defensive: guarantee the app is *running* (not paused) so the "alive"
+    // case is a fair test (pause-flag read, robust to a starved slow runner).
+    await ensureRunning(page);
     await page.evaluate(() => {
       App.setMode('powerBulb');
       State.set({ cycling: false, trails: 0 });
@@ -925,6 +934,7 @@ async function runTarget(name, url, evidenceBase) {
       pbB = null,
       pbDiag = '';
     for (let i = 0; i < 3; i++) {
+      await ensureRunning(page); // re-confirm running each window (recover any pause)
       const dA = await page.evaluate(() => ({
         t: App.getLiveTime(),
         a: Camera.getAngle(),

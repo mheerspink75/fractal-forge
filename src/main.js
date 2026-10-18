@@ -2162,6 +2162,14 @@ const App = (() => {
     return time;
   }
 
+  // Direct read of the pause flag. The Playwright "alive" sections must
+  // confirm the app is *running* before sampling, and reading this flag is
+  // reliable even when rAF is starved (a slow machine can look "frozen" even
+  // while running — inferring pause from a clock delta is unsafe there).
+  function isPaused() {
+    return paused;
+  }
+
   return {
     init,
     setMode,
@@ -2174,6 +2182,7 @@ const App = (() => {
     importCode,
     exportAt,
     togglePause,
+    isPaused,
     getLiveTime,
     startAutoGrow,
     cancelAutoGrow,
