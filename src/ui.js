@@ -598,8 +598,13 @@ export const UI = (() => {
       );
       addButton('ms-reset-cam', 'Reset camera', () => {
         Camera.setAngle(0);
+        Camera.setPitch(mode.camPitch || 0);
         Camera.setOrbitRadius(mode.orbitRadius || 3.0);
-        State.set({ camAngle: 0, orbitRadius: mode.orbitRadius || 3.0 });
+        State.set({
+          camAngle: 0,
+          camPitch: mode.camPitch || 0,
+          orbitRadius: mode.orbitRadius || 3.0
+        });
       });
     } else if (mode.shader === 'FRACTAL_TREE') {
       title.textContent = mode.label;
@@ -616,8 +621,13 @@ export const UI = (() => {
       );
       addButton('ms-reset-cam', 'Reset camera', () => {
         Camera.setAngle(0);
+        Camera.setPitch(mode.camPitch || 0);
         Camera.setOrbitRadius(mode.orbitRadius || 3.0);
-        State.set({ camAngle: 0, orbitRadius: mode.orbitRadius || 3.0 });
+        State.set({
+          camAngle: 0,
+          camPitch: mode.camPitch || 0,
+          orbitRadius: mode.orbitRadius || 3.0
+        });
       });
     } else if (mode.kind === 'lsystem') {
       title.textContent = mode.label;

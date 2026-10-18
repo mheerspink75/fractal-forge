@@ -1102,6 +1102,7 @@ const Share = (() => {
     'zoom',
     'growth',
     'camAngle',
+    'camPitch',
     'orbitRadius',
     'juliaPhase'
   ];
@@ -1125,6 +1126,7 @@ const Share = (() => {
     zoom: [0.5, 1e7],
     growth: [0, 1],
     camAngle: [-1000, 1000],
+    camPitch: [-1.05, 1.05],
     orbitRadius: [1.5, 8],
     juliaPhase: [0, 100]
   };
@@ -1609,6 +1611,7 @@ const App = (() => {
       center: [Camera.center.x, Camera.center.y],
       zoom: Camera.zoom,
       camAngle: Camera.getAngle(),
+      camPitch: Camera.getPitch(),
       orbitRadius: Camera.getOrbitRadius()
     });
     UI.updateZoomStatus();
@@ -1627,8 +1630,13 @@ const App = (() => {
     if (m.iterations) State.set({ iterations: m.iterations });
     if (m.power) State.set({ power: m.power });
     // Per-mode 3D framing: the tree is viewed closer than the bulb, so set the
-    // orbit radius from the registry (applyWorld then drives the camera from it).
-    if (m.kind === 'gpu3d') State.set({ orbitRadius: m.orbitRadius || 3.0 });
+    // orbit radius (and any per-mode pitch default) from the registry; applyWorld
+    // then drives the camera from these values.
+    if (m.kind === 'gpu3d')
+      State.set({
+        orbitRadius: m.orbitRadius || 3.0,
+        camPitch: Number.isFinite(m.camPitch) ? m.camPitch : 0
+      });
   }
 
   function setMode(id) {
@@ -1736,6 +1744,7 @@ const App = (() => {
     Camera.setCenter(cx, cy);
     Camera.setZoom(s.zoom);
     if (s.camAngle != null) Camera.setAngle(s.camAngle);
+    if (s.camPitch != null) Camera.setPitch(s.camPitch);
     if (s.orbitRadius != null) Camera.setOrbitRadius(s.orbitRadius);
 
     Effects.clearTrails();
@@ -2071,6 +2080,11 @@ const App = (() => {
     applySettings();
 
     Camera.reset(State.get().mode);
+    // A shared 3D camera pitch (Phase 2) must survive the reset: reset applies
+    // the mode's default pitch, so re-apply the URL-restored value on top — this
+    // is what makes a shared pitch honored on load. A junk/absent pitch is 0,
+    // so this is a no-op there. Non-3D modes have no pitch to restore.
+    if (Fractals.get(State.get().mode).kind === 'gpu3d') Camera.setPitch(State.get().camPitch);
     syncCamera();
     rebuildBuffers();
 
@@ -2084,7 +2098,8 @@ const App = (() => {
       onPan: (dx, dy) => {
         if (is3dMode()) {
           Camera.touch();
-          Camera.rotate3d(dx * 0.01);
+          Camera.rotate3d(dx * 0.01); // horizontal drag -> azimuth
+          Camera.rotatePitch(dy * 0.01); // vertical drag -> pitch
         } else {
           Camera.pan(dx, dy);
         }
@@ -2101,9 +2116,12 @@ const App = (() => {
       },
       onFocus: (x, y) => {
         if (is3dMode()) {
+          // Double-click restores the mode's 3D defaults (angle, pitch, radius).
           Camera.touch();
+          const m = Fractals.get(State.get().mode);
           Camera.setAngle(0);
-          Camera.setOrbitRadius(Fractals.get(State.get().mode).orbitRadius || 3.0);
+          Camera.setPitch(Number.isFinite(m.camPitch) ? m.camPitch : 0);
+          Camera.setOrbitRadius(m.orbitRadius || 3.0);
         } else {
           Camera.focusAt(x, y);
         }

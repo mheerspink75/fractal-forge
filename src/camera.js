@@ -10,10 +10,19 @@ export const Camera = (() => {
   let camPos = [0, 0.6, 3.0];
   let camTarget = [0, 0, 0];
   let camAngle = 0;
+  let camPitch = 0; // radians; 0 = the original slightly-above framing (y offset 0.6)
   let orbitRadius = 3.0;
 
   function applyOrbit() {
-    camPos = [Math.sin(camAngle) * orbitRadius, 0.6, Math.cos(camAngle) * orbitRadius];
+    // camPitch tilts the orbit up/down around the target. At camPitch = 0 the
+    // horizontal radius is full and the height is the original +0.6 baseline, so
+    // the default framing is byte-identical to before pitch existed.
+    const horiz = orbitRadius * Math.cos(camPitch);
+    camPos = [
+      Math.sin(camAngle) * horiz,
+      0.6 + orbitRadius * Math.sin(camPitch),
+      Math.cos(camAngle) * horiz
+    ];
     camTarget = [0, 0, 0];
   }
 
@@ -23,6 +32,7 @@ export const Camera = (() => {
     zoom = (window.innerHeight || 800) / m.span;
     camAngle = 0;
     orbitRadius = m.orbitRadius || 3.0; // per-mode framing (e.g. the tree is closer)
+    camPitch = Number.isFinite(m.camPitch) ? m.camPitch : 0; // per-mode pitch default
     applyOrbit();
   }
 
@@ -86,6 +96,21 @@ export const Camera = (() => {
     return orbitRadius;
   }
 
+  // Vertical orbit (pitch). Bounded so the camera stays in a sane band above
+  // and below the subject instead of diving through it. Mirrors setAngle.
+  const PITCH_MAX = 1.05; // ~60 degrees
+  function setPitch(p) {
+    camPitch = Util.clamp(Number.isFinite(p) ? p : 0, -PITCH_MAX, PITCH_MAX);
+    applyOrbit();
+  }
+  function rotatePitch(delta) {
+    camPitch = Util.clamp(camPitch + delta, -PITCH_MAX, PITCH_MAX);
+    applyOrbit();
+  }
+  function getPitch() {
+    return camPitch;
+  }
+
   // --- 3D auto-orbit (Phase 4) ---
   // While the Mandelbulb is animating, the camera drifts around the bulb at a
   // slow, constant rate — the "orbit" half of the classic 3D intro. Any user
@@ -147,6 +172,9 @@ export const Camera = (() => {
     rotate3d,
     setAngle,
     getAngle,
+    setPitch,
+    rotatePitch,
+    getPitch,
     setOrbitRadius,
     getOrbitRadius,
     touch,

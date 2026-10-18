@@ -298,7 +298,10 @@ console.log('--- Share (encode/decode round-trip) ---');
   const code = M.Share.encode();
   check('code has FF- prefix', code.startsWith(M.Share.PREFIX));
   console.log('  (share code length: ' + code.length + ' chars)');
-  check('code is compact (< 600 chars)', code.length < 600);
+  // Soft compactness sanity cap. It sits well above a few dozen fields so a
+  // pathologically large payload is caught; the cap was raised from 600 to 700
+  // when camPitch joined the codec (alongside camAngle/orbitRadius).
+  check('code is compact (< 700 chars)', code.length < 700);
   M.State.reset();
   M.Share.apply(code);
   const s = M.State.get();
@@ -342,6 +345,13 @@ console.log('--- Share (boundary validation and clamping) ---');
   check('power clamped to max', out.power === 16);
   check('bloom clamped to max', out.bloom === 1);
   check('unknown mode dropped', out.mode === undefined);
+  // Phase 2: camPitch (3D camera) is clamped to its ±60° band by the codec.
+  check('pitch clamped to 1.05 (share code)', M.Share.sanitize({ camPitch: 99 }).camPitch === 1.05);
+  check(
+    'pitch clamped to -1.05 (share code)',
+    M.Share.sanitize({ camPitch: -99 }).camPitch === -1.05
+  );
+  check('junk pitch dropped (share code)', M.Share.sanitize({ camPitch: 'abc' }).camPitch === undefined);
   // Non-finite values are dropped, not coerced.
   const out2 = M.Share.sanitize({ zoom: NaN, seed: Infinity });
   check('NaN zoom dropped', out2.zoom === undefined);
@@ -418,6 +428,20 @@ console.log('--- State + URL (Phase 4: shareable links) ---');
   check('negative clock clamped to 0', negc.partial.clock === 0);
   const bigc = M.State.parseURL('?clock=99999');
   check('clock clamped to 3600', bigc.partial.clock === 3600);
+
+  // Phase 2: 3D camera pitch round-trips; junk dropped; range clamped.
+  M.State.set({ mode: 'mandelbulb', seed: 7, camPitch: 0.5 });
+  const qp = M.State.toQuery(M.State.get());
+  check('query carries pitch=0.5', qp.indexOf('pitch=0.5') >= 0, qp);
+  const rtp = M.State.parseURL(qp);
+  check('round-trip keeps pitch=0.5', Math.abs(rtp.partial.camPitch - 0.5) < 1e-9);
+  const junkp = M.State.parseURL('?fractal=mandelbulb&seed=7&pitch=abc');
+  check('junk pitch dropped', junkp.partial.camPitch === undefined, JSON.stringify(junkp.partial));
+  const bigp = M.State.parseURL('?pitch=99');
+  check('pitch clamped to 1.05', Math.abs(bigp.partial.camPitch - 1.05) < 1e-9);
+  const lowp = M.State.parseURL('?pitch=-99');
+  check('pitch clamped to -1.05', Math.abs(lowp.partial.camPitch - -1.05) < 1e-9);
+  M.State.reset();
 
   // Unknown-only params and missing search -> no change at all.
   const unk = M.State.parseURL('?foo=bar&baz=1');

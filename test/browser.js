@@ -779,6 +779,106 @@ async function runTarget(name, url, evidenceBase) {
       'MAE=' + clockMAE.toFixed(3) + ' (cap 2.0)'
     );
 
+    // ---------- Phase 2: 3D camera pitch (vertical orbit) ----------
+    // A vertical drag tilts the camera up/down (pitch); a horizontal drag turns
+    // it around (azimuth). Verify for all three 3D modes at two fresh seeds that
+    // a vertical drag changes the camera height (camPos.y) and the frame stays
+    // valid, then that pitch round-trips through the Share URL (junk falls back).
+    console.log('\n-- Phase 2: 3D camera pitch --');
+    const hideOverlays = () =>
+      page.evaluate(
+        (sel) =>
+          sel.split(',').forEach((s) => {
+            const el = document.querySelector(s.trim());
+            if (el) el.style.display = 'none';
+          }),
+        OVERLAYS
+      );
+    const showOverlays = () =>
+      page.evaluate(
+        (sel) =>
+          sel.split(',').forEach((s) => {
+            const el = document.querySelector(s.trim());
+            if (el) el.style.display = '';
+          }),
+        OVERLAYS
+      );
+    // Vertical drag across the canvas center: down (positive dy) -> positive pitch.
+    async function verticalDrag(dyPx) {
+      await hideOverlays();
+      const box = await page.locator('#gl-canvas').first().boundingBox();
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
+      await page.mouse.move(cx, cy);
+      await page.mouse.down();
+      await page.mouse.move(cx, cy + dyPx, { steps: 8 });
+      await page.mouse.up();
+      await page.waitForTimeout(120);
+      await showOverlays();
+    }
+
+    const P2_MODES = ['mandelbulb', 'fractalTree3d', 'powerBulb'];
+    const P2_SEEDS = [1, 1597334671];
+    for (const mode of P2_MODES) {
+      for (const seed of P2_SEEDS) {
+        await page.evaluate(
+          ({ mode, seed }) => {
+            App.setMode(mode);
+            State.set({ cycling: false, trails: 0, anim: 0, seed });
+            Camera.setPitch(0);
+          },
+          { mode, seed }
+        );
+        await page.waitForTimeout(2500); // settle the 3D raymarch
+        const before = await page.evaluate(() => ({ pitch: Camera.getPitch(), y: Camera.camPos[1] }));
+        await verticalDrag(70);
+        const after = await page.evaluate(() => ({ pitch: Camera.getPitch(), y: Camera.camPos[1] }));
+        const frame = await capture(page, evidenceDir, 'p2-pitch-' + mode + '-' + seed);
+        ok(
+          'Phase 2 pitch: ' + mode + ' @ seed ' + seed + ' — vertical drag raises the camera, valid frame',
+          Math.abs(after.pitch - before.pitch) > 0.01 &&
+            Math.abs(after.y - before.y) > 0.005 &&
+            isValidFrame(decode(frame)),
+          'pitch ' + before.pitch.toFixed(3) + '->' + after.pitch.toFixed(3) +
+            '  camPos.y ' + before.y.toFixed(3) + '->' + after.y.toFixed(3) +
+            '  ' + JSON.stringify(frameStats(decode(frame)))
+        );
+      }
+    }
+
+    // Pitch round-trips through the Share URL; a junk pitch value falls back to 0.
+    const p2query = await page.evaluate(() => {
+      App.setMode('mandelbulb');
+      State.set({ seed: 7, anim: 0, camPitch: 0.5 });
+      return State.toQuery(State.get());
+    });
+    const p2page = await context.newPage();
+    await p2page.goto(url + p2query, { waitUntil: 'load', timeout: 90000 });
+    await p2page.waitForTimeout(2500);
+    const p2restored = await p2page.evaluate(() => Camera.getPitch());
+    const p2frame = await capture(p2page, evidenceDir, 'p2-pitch-restore');
+    ok(
+      'Phase 2 pitch: Share URL restores the camera pitch (valid frame)',
+      Math.abs(p2restored - 0.5) < 1e-3 && isValidFrame(decode(p2frame)),
+      'pitch=' + p2restored.toFixed(4) + ' ' + JSON.stringify(frameStats(decode(p2frame)))
+    );
+    await p2page.close();
+
+    const p2junk = await context.newPage();
+    await p2junk.goto(url + '?fractal=mandelbulb&seed=7&anim=0&pitch=abc', {
+      waitUntil: 'load',
+      timeout: 90000
+    });
+    await p2junk.waitForTimeout(2500);
+    const p2junkPitch = await p2junk.evaluate(() => Camera.getPitch());
+    const p2junkFrame = await capture(p2junk, evidenceDir, 'p2-pitch-junk');
+    ok(
+      'Phase 2 pitch: junk pitch value falls back to 0 (valid frame)',
+      p2junkPitch === 0 && isValidFrame(decode(p2junkFrame)),
+      'pitch=' + p2junkPitch + ' ' + JSON.stringify(frameStats(decode(p2junkFrame)))
+    );
+    await p2junk.close();
+
     // ---------- Phase 4: the Mandelbulb animates (breathing power + auto-orbit) ----------
     // While the Mandelbulb is animating, two frames taken a moment apart must
     // differ (the camera slowly orbits the bulb and the power "breathes" with

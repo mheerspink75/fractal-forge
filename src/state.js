@@ -27,6 +27,7 @@ export const State = (() => {
     zoom: 100,
     growth: 1.0,
     camAngle: 0,
+    camPitch: 0,
     orbitRadius: 3.0,
     juliaPhase: 0.0
   };
@@ -60,7 +61,11 @@ export const State = (() => {
     { key: 'palette', param: 'palette', type: 'int', range: [0, 8] },
     { key: 'anim', param: 'time', type: 'num', range: [0, 1] },
     { key: 'iterations', param: 'iterations', type: 'int', range: [16, 4096] },
-    { key: 'clock', param: 'clock', type: 'num', range: [0, 3600] }
+    { key: 'clock', param: 'clock', type: 'num', range: [0, 3600] },
+    // 3D camera pitch (radians, ±~60 deg). Junk values are dropped (the parse
+    // loop skips non-finite numbers) and the range clamps out-of-band values,
+    // mirroring how orbitRadius is handled.
+    { key: 'camPitch', param: 'pitch', type: 'num', range: [-1.05, 1.05] }
   ];
 
   // Serialize a state into a query string (no leading '?'). The clock field
