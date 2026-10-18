@@ -62,6 +62,19 @@ const GOLDEN_QUERY = '?fractal=mandelbrot&seed=424242&palette=2&time=0&iteration
 // Golden-image cap (64x64 MAE): fresh-launch jitter measures ~0.2-0.5 while any real
 // regression (wrong fractal/palette/seed/effects) moves the scene by >= 2.5.
 const GOLDEN_MAE_CAP = 2.0; // committed-baseline MAE must stay below this
+// 3D golden baselines (Phase 3): one per gpu3d mode, captured warm at t=0 (anim=0),
+// so the camera is at its deterministic default (angle 0, pitch 0, mode radius).
+// 3D raymarching is noisier than 2D and cross-platform (Windows vs Linux CI)
+// rasterization differs, so these get their own, larger cap than the 2D baseline.
+const GOLDEN_3D = [
+  { name: 'mandelbulb', file: 'mandelbulb-424242.json', query: '?fractal=mandelbulb&seed=424242&palette=2&time=0&iterations=256' },
+  { name: 'fractalTree3d', file: 'fractalTree3d-424242.json', query: '?fractal=fractalTree3d&seed=424242&palette=2&time=0&iterations=256' },
+  { name: 'powerBulb', file: 'powerBulb-424242.json', query: '?fractal=powerBulb&seed=424242&palette=2&time=0&iterations=256' }
+];
+// Measured warm-vs-warm spread on one platform is ~0.03–0.41 (64x64); a real
+// 3D shader/regression moves the frame by several MAE points. 4.0 sits above the
+// cross-platform delta while still catching real visual breakage. 2D stays at 2.0.
+const GOLDEN_3D_CAP = 4.0;
 // A broken seed (mode ignores u_seed) yields near-identical frames: measured jitter
 // is ~0.2 while a working seed change moves composition by >= 2.5 (64x64 downsample).
 const SEED_MAE_FLOOR = 1.5; // seed-driven MAE must stay above this
@@ -1122,6 +1135,38 @@ async function runTarget(name, url, evidenceBase) {
         'Golden: canonical scene renders a valid frame',
         isValidFrame(decode(live)),
         JSON.stringify(frameStats(decode(live)))
+      );
+    }
+
+    // ---------- Golden image: 3D baselines (Phase 3) ----------
+    // One committed baseline per gpu3d mode, captured warm at t=0 (anim=0) so the
+    // camera is at its deterministic default and all motion terms are identity.
+    // A cold 3D context renders differently (shader warmup + raymarch settle), so
+    // burn a warm-up page per baseline, then compare the settled frame to it.
+    console.log('\n-- Golden image: 3D baselines (pixel regression) --');
+    for (const b of GOLDEN_3D) {
+      const w = await context.newPage();
+      await w.goto(url + b.query, { waitUntil: 'load' });
+      await w.waitForTimeout(2500);
+      await w.close();
+      const gp = await context.newPage();
+      await gp.goto(url + b.query, { waitUntil: 'load' });
+      await gp.waitForTimeout(2500);
+      const live3d = await capture(gp, evidenceDir, 'golden-' + b.name + '-live');
+      await gp.close();
+      const base = JSON.parse(
+        fs.readFileSync(path.join(__dirname, 'golden', b.file), 'utf8')
+      );
+      const m3d = mae(downsample(decode(live3d), GRID), new Float32Array(base.values));
+      ok(
+        'Golden 3D ' + b.name + ': matches the committed baseline',
+        m3d < GOLDEN_3D_CAP,
+        '64x64 MAE=' + m3d.toFixed(3) + ' (cap ' + GOLDEN_3D_CAP + ')'
+      );
+      ok(
+        'Golden 3D ' + b.name + ': renders a valid frame',
+        isValidFrame(decode(live3d)),
+        JSON.stringify(frameStats(decode(live3d)))
       );
     }
 

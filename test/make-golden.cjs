@@ -1,6 +1,10 @@
 /* Golden-image baseline generator (64x64 downsample grid, MAE space).
-   Warms the context, then saves the canonical scene's 64x64 RGB grid as JSON.
-   Run: node test/make-golden.cjs   (writes test/golden/mandelbrot-424242.json) */
+   Warms the context, then saves each scene's 64x64 RGB grid as JSON.
+   Usage:
+     node test/make-golden.cjs '<sceneJson>' ['<sceneJson>' ...]
+   A scene is { "mode": "...", "seed": int, "palette": int, "iterations": int,
+   "settle": ms (optional) }. With no args it regenerates the original 2D
+   Mandelbrot baseline. Writes test/golden/<mode>-<seed>.json for each scene. */
 const { chromium } = require('playwright');
 const { PNG } = require('pngjs');
 const { spawn } = require('child_process');
@@ -8,9 +12,53 @@ const fs = require('fs');
 const path = require('path');
 
 const PORT = 8199;
-const QUERY = '?fractal=mandelbrot&seed=424242&palette=2&time=0&iterations=512';
 const GRID = 64;
 const OVERLAYS = '.topbar,.panel-left,.panel-right,.statusbar,.fx-overlay,.onboarding';
+
+function parseScene(arg) {
+  let s;
+  try {
+    s = JSON.parse(arg);
+  } catch (e) {
+    throw new Error('Bad scene JSON: ' + arg);
+  }
+  if (!s || typeof s.mode !== 'string') throw new Error('Scene needs a "mode": ' + arg);
+  return {
+    mode: s.mode,
+    seed: s.seed != null ? s.seed : 424242,
+    palette: s.palette != null ? s.palette : 2,
+    iterations: s.iterations != null ? s.iterations : 256,
+    // 3D raymarching (software GL) needs a longer settle than the 2D eval modes.
+    settle: s.settle != null ? s.settle : 2500
+  };
+}
+function sceneQuery(sc) {
+  return (
+    '?fractal=' + sc.mode +
+    '&seed=' + sc.seed +
+    '&palette=' + sc.palette +
+    '&time=0&iterations=' + sc.iterations
+  );
+}
+function sceneFile(sc) {
+  return path.join(__dirname, 'golden', sc.mode + '-' + sc.seed + '.json');
+}
+
+const argv = process.argv.slice(2);
+const DEFAULT_SCENE = { mode: 'mandelbrot', seed: 424242, palette: 2, iterations: 512, settle: 1200 };
+function loadScenes() {
+  // Preferred: `--scenes <file>` where the file holds a JSON array (or object)
+  // of scene specs. This avoids shell-quoting pitfalls of inline JSON args.
+  const i = argv.indexOf('--scenes');
+  if (i !== -1 && argv[i + 1]) {
+    let arr = JSON.parse(fs.readFileSync(argv[i + 1], 'utf8'));
+    if (!Array.isArray(arr)) arr = [arr];
+    return arr.map((s) => Object.assign({ seed: 424242, palette: 2, iterations: 256, settle: 2500 }, s));
+  }
+  const rest = argv.filter((a) => a.trim() !== '');
+  return rest.length ? rest.map(parseScene) : [DEFAULT_SCENE];
+}
+const SCENES = loadScenes();
 
 function downsample(png, n) {
   const { width, height, data } = png;
@@ -58,37 +106,42 @@ function downsample(png, n) {
     ]
   });
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-  const url = 'http://127.0.0.1:' + PORT + '/' + QUERY;
 
-  async function grab() {
-    const page = await ctx.newPage();
-    await page.goto(url, { waitUntil: 'load' });
-    await page.waitForTimeout(1200);
-    await page.evaluate((sel) =>
-      sel.split(',').forEach((s) => {
-        const el = document.querySelector(s.trim());
-        if (el) el.style.display = 'none';
-      })
-    , OVERLAYS);
-    const buf = await page.locator('#gl-canvas').first().screenshot({ type: 'png' });
-    await page.close();
-    return downsample(PNG.sync.read(buf), GRID);
+  for (const sc of SCENES) {
+    const query = sceneQuery(sc);
+    const url = 'http://127.0.0.1:' + PORT + '/' + query;
+
+    async function grab() {
+      const page = await ctx.newPage();
+      await page.goto(url, { waitUntil: 'load' });
+      await page.waitForTimeout(sc.settle);
+      await page.evaluate((sel) =>
+        sel.split(',').forEach((s) => {
+          const el = document.querySelector(s.trim());
+          if (el) el.style.display = 'none';
+        })
+      , OVERLAYS);
+      const buf = await page.locator('#gl-canvas').first().screenshot({ type: 'png' });
+      await page.close();
+      return downsample(PNG.sync.read(buf), GRID);
+    }
+
+    // Warm up (first frame is cold/shader-compiling), then capture a settled grid twice.
+    await grab();
+    const g1 = await grab();
+    const g2 = await grab();
+    let spread = 0;
+    for (let i = 0; i < g1.length; i++) spread += Math.abs(g1[i] - g2[i]);
+    spread /= g1.length;
+
+    const file = sceneFile(sc);
+    fs.writeFileSync(file, JSON.stringify({ scene: query, grid: GRID, values: Array.from(g2) }));
+    console.log(
+      'golden written: ' +
+        path.relative(process.cwd(), file) +
+        ' (scene ' + query + ', warm spread=' + spread.toFixed(3) + ')'
+    );
   }
-
-  // Warm up (first frame is cold/shader-compiling), then capture a settled grid twice.
-  await grab();
-  const g1 = await grab();
-  const g2 = await grab();
-  let spread = 0;
-  for (let i = 0; i < g1.length; i++) spread += Math.abs(g1[i] - g2[i]);
-  spread /= g1.length;
-  console.log('warm-vs-warm MAE spread =', spread.toFixed(3));
-
-  fs.writeFileSync(
-    path.join(__dirname, 'golden', 'mandelbrot-424242.json'),
-    JSON.stringify({ scene: QUERY, grid: GRID, values: Array.from(g2) })
-  );
-  console.log('golden written: test/golden/mandelbrot-424242.json');
   await browser.close();
   server.kill();
   process.exit(0);
