@@ -201,9 +201,13 @@ async function capture(page, evidenceDir, name) {
   );
   let buf;
   try {
-    buf = await page.locator('#gl-canvas').first().screenshot({ type: 'png', timeout: 30000 });
+    // 90s ceiling, not a typical wait: on a slow CI VM the first page that
+    // compiles a heavy 3D shader holds the main thread (SwiftShader), and the
+    // screenshot request can't be serviced until compilation finishes. 30s
+    // was too tight for that (CI: golden tree capture timed out).
+    buf = await page.locator('#gl-canvas').first().screenshot({ type: 'png', timeout: 90000 });
   } catch (e) {
-    buf = await page.screenshot({ type: 'png' });
+    buf = await page.screenshot({ type: 'png', timeout: 90000 });
   }
   await page.evaluate(
     (sel) =>
@@ -1108,6 +1112,63 @@ async function runTarget(name, url, evidenceBase) {
     );
     await page.evaluate(() => State.set({ anim: 0.5 })); // leave a sensible state
 
+    // ---------- Boot world: a shared link actually renders its own mode and palette ----------
+    // Boot used to silently ignore the URL's world: the engine kept its default
+    // mode and the color system its default palette, so every shared link
+    // rendered the default mandelbrot in the default palette until the user
+    // clicked a mode — and the 3D baselines even captured that. These checks
+    // pin the restored-world contract:
+    //   (a) each 3D mode from a FRESH page must be distinct from the 2D default
+    //       (a boot stuck on one fractal collapses them to jitter-level MAE);
+    //   (b) ?palette= reaches the renderer (two palettes on one scene must
+    //       differ well above jitter). Floors: real differences measure ~9-170
+    //       MAE, fresh-render jitter ~0.4; floor 8 leaves a wide margin.
+    console.log('\n-- Boot world: shared links render their own mode and palette --');
+    async function bootGrid(mode) {
+      const p = await context.newPage();
+      await p.goto(
+        url + '?fractal=' + mode + '&seed=424242&palette=2&time=0&iterations=256',
+        { waitUntil: 'load', timeout: 90000 }
+      );
+      await p.waitForTimeout(mode === 'mandelbulb' || mode === 'fractalTree3d' || mode === 'powerBulb' ? 2500 : 900);
+      const buf = await capture(p, evidenceDir, 'boot-' + mode);
+      await p.close();
+      return downsample(decode(buf), GRID);
+    }
+    const gbDefault = await bootGrid('mandelbrot');
+    const gbBulb = await bootGrid('mandelbulb');
+    const gbTree = await bootGrid('fractalTree3d');
+    const gbPower = await bootGrid('powerBulb');
+    ok(
+      'Boot world: 3D modes open as their own subject from a fresh page (not the default)',
+      mae(gbDefault, gbBulb) > 8 && mae(gbDefault, gbTree) > 8 && mae(gbDefault, gbPower) > 8,
+      'bulb vs default=' +
+        mae(gbDefault, gbBulb).toFixed(2) +
+        '  tree vs default=' +
+        mae(gbDefault, gbTree).toFixed(2) +
+        '  power vs default=' +
+        mae(gbDefault, gbPower).toFixed(2) +
+        '  (floor 8)'
+    );
+    {
+      const pa = await context.newPage();
+      await pa.goto(url + '?fractal=mandelbrot&seed=424242&palette=2&time=0&iterations=256', { waitUntil: 'load' });
+      await pa.waitForTimeout(900);
+      const bufA = await capture(pa, evidenceDir, 'boot-pal-2');
+      await pa.close();
+      const pb = await context.newPage();
+      await pb.goto(url + '?fractal=mandelbrot&seed=424242&palette=5&time=0&iterations=256', { waitUntil: 'load' });
+      await pb.waitForTimeout(900);
+      const bufB = await capture(pb, evidenceDir, 'boot-pal-5');
+      await pb.close();
+      const palMAE = mae(downsample(decode(bufA), GRID), downsample(decode(bufB), GRID));
+      ok(
+        'Boot world: ?palette= reaches the renderer (same scene, palette 2 vs 5 differs)',
+        palMAE > 8,
+        'MAE=' + palMAE.toFixed(2) + ' (floor 8)'
+      );
+    }
+
     // ---------- Golden image: pixel regression against the committed baseline ----------
     console.log('\n-- Golden image: pixel regression --');
     {
@@ -1145,13 +1206,17 @@ async function runTarget(name, url, evidenceBase) {
     // burn a warm-up page per baseline, then compare the settled frame to it.
     console.log('\n-- Golden image: 3D baselines (pixel regression) --');
     for (const b of GOLDEN_3D) {
+      // Long settle for CI headroom: heavy 3D shaders compile on the main
+      // thread on first use, and slow VMs need extra time before the page is
+      // screenshot-ready (a 2500ms settle + 30s screenshot budget was not
+      // enough for the raymarched tree on the Linux runner).
       const w = await context.newPage();
       await w.goto(url + b.query, { waitUntil: 'load' });
-      await w.waitForTimeout(2500);
+      await w.waitForTimeout(4000);
       await w.close();
       const gp = await context.newPage();
       await gp.goto(url + b.query, { waitUntil: 'load' });
-      await gp.waitForTimeout(2500);
+      await gp.waitForTimeout(4000);
       const live3d = await capture(gp, evidenceDir, 'golden-' + b.name + '-live');
       await gp.close();
       const base = JSON.parse(

@@ -1,0 +1,6 @@
+[
+  { "mode": "mandelbrot", "seed": 424242, "palette": 2, "iterations": 512, "settle": 1500 },
+  { "mode": "mandelbulb", "seed": 424242, "palette": 2, "iterations": 256, "settle": 3000 },
+  { "mode": "fractalTree3d", "seed": 424242, "palette": 2, "iterations": 256, "settle": 3000 },
+  { "mode": "powerBulb", "seed": 424242, "palette": 2, "iterations": 256, "settle": 3000 }
+]

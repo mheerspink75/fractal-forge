@@ -2154,6 +2154,23 @@ const App = (() => {
       }
     });
     UI.renderModeSpecific();
+
+    // Apply the URL-restored world to the render subsystems before the first
+    // frame. URL restore writes into State (mode, seed, palette, ...), but the
+    // ENGINE MODE and the PALETTE are per-subsystem choices
+    // (Engine.currentModeId, ColorSystem.state.index) that nothing sets from
+    // State on the boot path — without this, every shared link rendered the
+    // default mandelbrot in the default palette until the user manually
+    // clicked a mode. applyWorld() is the single reliable sync point
+    // (State -> engine/color/camera/UI) and never overwrites URL-owned
+    // parameters (seed, iterations, clock, ...). `power` is the one render
+    // parameter the URL cannot carry, so give 3D modes their registry
+    // exponent (a shared Power Bulb link means the p=3 silhouette, not the
+    // p=8 global default).
+    const bootMode = Fractals.get(State.get().mode);
+    if (bootMode && bootMode.power) State.set({ power: bootMode.power });
+    applyWorld();
+
     if (restored.changed) UI.toast('Restored world from URL', 'info');
 
     window.addEventListener('resize', onResize);
