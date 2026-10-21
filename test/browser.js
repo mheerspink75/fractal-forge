@@ -201,9 +201,13 @@ async function capture(page, evidenceDir, name) {
   );
   let buf;
   try {
-    buf = await page.locator('#gl-canvas').first().screenshot({ type: 'png', timeout: 30000 });
+    // 90s ceiling, not a typical wait: on a slow CI VM the first page that
+    // compiles a heavy 3D shader holds the main thread (SwiftShader), and the
+    // screenshot request can't be serviced until compilation finishes. 30s
+    // was too tight for that (CI: golden tree capture timed out).
+    buf = await page.locator('#gl-canvas').first().screenshot({ type: 'png', timeout: 90000 });
   } catch (e) {
-    buf = await page.screenshot({ type: 'png' });
+    buf = await page.screenshot({ type: 'png', timeout: 90000 });
   }
   await page.evaluate(
     (sel) =>
@@ -1202,13 +1206,17 @@ async function runTarget(name, url, evidenceBase) {
     // burn a warm-up page per baseline, then compare the settled frame to it.
     console.log('\n-- Golden image: 3D baselines (pixel regression) --');
     for (const b of GOLDEN_3D) {
+      // Long settle for CI headroom: heavy 3D shaders compile on the main
+      // thread on first use, and slow VMs need extra time before the page is
+      // screenshot-ready (a 2500ms settle + 30s screenshot budget was not
+      // enough for the raymarched tree on the Linux runner).
       const w = await context.newPage();
       await w.goto(url + b.query, { waitUntil: 'load' });
-      await w.waitForTimeout(2500);
+      await w.waitForTimeout(4000);
       await w.close();
       const gp = await context.newPage();
       await gp.goto(url + b.query, { waitUntil: 'load' });
-      await gp.waitForTimeout(2500);
+      await gp.waitForTimeout(4000);
       const live3d = await capture(gp, evidenceDir, 'golden-' + b.name + '-live');
       await gp.close();
       const base = JSON.parse(
