@@ -121,7 +121,15 @@ function downsample(png, n) {
           if (el) el.style.display = 'none';
         })
       , OVERLAYS);
-      const buf = await page.locator('#gl-canvas').first().screenshot({ type: 'png' });
+      // Mirror the browser.js capture path: 90 s ceiling (first page that
+      // compiles a heavy 3D shader holds the SwiftShader main thread) + a
+      // full-page fallback, so the element-stability wait can't sink a run.
+      let buf;
+      try {
+        buf = await page.locator('#gl-canvas').first().screenshot({ type: 'png', timeout: 90000 });
+      } catch (e) {
+        buf = await page.screenshot({ type: 'png', timeout: 90000 });
+      }
       await page.close();
       return downsample(PNG.sync.read(buf), GRID);
     }

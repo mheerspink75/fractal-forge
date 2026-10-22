@@ -455,12 +455,25 @@ export const Shaders = (() => {
       // rotation). A gentle u_time sway is added when u_anim > 0.
       float twistSeed = 0.3 * u_seed;
       float sway = 0.3 * u_anim * sin(u_time * 0.5);
+      float leafRad = BRANCH_RAD;   // leaf-node radius (local units) caps each tip
       for (int i = 0; i < MAXDEPTH; i++) {
         float fi = float(i);
         // Growth gate: always draw the trunk (i=0); draw level i only once the
         // canopy has grown past it. So the tree "grows into being" with u_growth.
-        if (i == 0 || (fi + 0.5 < u_growth * float(MAXDEPTH))) {
+        bool drawn = (i == 0) || (fi + 0.5 < u_growth * float(MAXDEPTH));
+        if (drawn) {
           d = min(d, (trunkDist(p) - BRANCH_RAD) * s);
+          // Leaf tips: when this is the deepest *drawn* level, cap the branch
+          // with a small leaf node at its trunk tip (0,0.5,0 in this local
+          // frame). Because every branch terminates at the deepest drawn level,
+          // the union across pixels reads as foliage at the tree's outer tips.
+          // The node inherits the branch's position (seed twist + sway), so it
+          // moves with the tree and the seed, and it grows in with the canopy:
+          // as more levels are drawn the leaf rides out to the new tips.
+          bool terminal = !(fi + 1.5 < u_growth * float(MAXDEPTH));
+          if (terminal) {
+            d = min(d, (length(p - vec3(0.0, 0.5, 0.0)) - leafRad) * s);
+          }
         }
         // Map p into the closest limb's local frame (best-branch IFS step).
         vec3 best = p;
@@ -522,8 +535,17 @@ export const Shaders = (() => {
         float fresnel = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
         // Woody gradient by height, tinted by the active palette (palettePhase).
         float h = clamp(pos.y + 0.5, 0.0, 1.0);
+        // Seed-driven per-branch tint (bounded, D3-safe): a small phase drift
+        // keyed on height (a proxy for branch depth) and the seed, so different
+        // trees are tinted slightly differently without breaking framing.
+        float phase = pos.y * 0.25 + u_palette_phase + 0.05 * sin(u_seed * 1.3 + h * 5.0);
         vec3 wood = mix(vec3(0.42, 0.28, 0.15), vec3(0.62, 0.78, 0.38), h);
-        vec3 base = mix(wood, palette(pos.y * 0.25 + u_palette_phase), 0.45);
+        vec3 base = mix(wood, palette(phase), 0.45);
+        // Foliage blend: upper + outer hits (the leafy tips) shift toward a
+        // bounded green so the canopy reads as foliaged, not a bare cylinder.
+        float leaf = smoothstep(0.45, 0.95, h) * smoothstep(0.05, 0.28, length(pos.xz));
+        vec3 leafC = mix(vec3(0.45, 0.72, 0.28), palette(phase + 0.04), 0.35);
+        base = mix(base, leafC, leaf * 0.55);
         col = base * (0.22 + diff * 1.05) + spec * 0.5 + fresnel * base * 0.7;
       } else {
         col = vec3(0.015, 0.02, 0.04);

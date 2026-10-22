@@ -647,7 +647,7 @@ async function runTarget(name, url, evidenceBase) {
       .then(() => true)
       .catch(() => false);
     ok('Auto-grow: tree reaches full growth after selection', grewEnd);
-    await page.waitForTimeout(900); // settle under SwiftShader
+    await page.waitForTimeout(2000); // settle under SwiftShader (slow-runner guard)
     const endFrame = await capture(page, evidenceDir, 'autogrow-tree-end');
     ok(
       'Auto-grow: tree end-state renders a valid frame',
