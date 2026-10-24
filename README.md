@@ -31,7 +31,7 @@ exactly from a short share code.
 | **Classic** | Mandelbrot (deep zoom, smooth escape coloring) · Julia Set · Burning Ship · Newton fractals · Sierpinski |
 | **Experimental** | Cosmic Nebula · Dreamscape · Neural Bloom · Quantum Field — original procedural modes that generate a unique composition every time |
 | **Structural** | Koch Snowflake · Dragon Curve · Fractal Tree · Plant Growth (L-systems) |
-| **3D** | Mandelbulb — real-time raymarched distance-estimation fractal with orbit camera · Fractal Tree 3D — raymarched self-similar I-tree that grows into being (Growth slider) and sways with the animation clock · Power Bulb — the z^p powerfractal family (default p=3, adjustable exponent) with the same orbit camera |
+| **3D** | Mandelbulb — real-time raymarched distance-estimation fractal with orbit camera · Fractal Tree 3D — raymarched self-similar I-tree that grows into being (Growth slider), with leafy tips on the canopy, and sways with the animation clock · Power Bulb — the z^p powerfractal family (default p=3, adjustable exponent) with the same orbit camera |
 
 ### Interaction
 - **Deep zoom** (the zoom scale caps at 10⁹×) with smooth, continuous escape coloring. The math is 32-bit `highp float`, so very deep zooms show the familiar deep-zoom precision artifacts rather than lossless detail — **drag to pan**, **double-click to focus**
@@ -52,8 +52,9 @@ brightness · a drifting ambient particle field behind the render. The scene nev
 ### 3D experience
 The **Mandelbulb** mode raymarches a true 3D fractal in real time with a smooth orbit camera and
 adjustable power exponent (which "breathes" with the clock while animating). The **Fractal Tree 3D**
-mode raymarches a self-similar branching tree: drag the **Growth** slider to draw more of the canopy,
-and the whole tree gently sways with the animation clock. The **Power Bulb** mode raymarches the
+mode raymarches a self-similar branching tree: drag the **Growth** slider to draw more of the canopy —
+soft leaf tips and a foliage tint grow in at the outer, upper branches — and the whole tree gently
+sways with the animation clock. The **Power Bulb** mode raymarches the
 z^p powerfractal family (a third 3D cousin of the Mandelbrot set): the **Power** slider sets the
 exponent (default 3), which also "breathes" with the clock while animating. Drag to orbit any 3D
 view — horizontally to spin around the subject, vertically to pitch the camera up or down (±~60°);

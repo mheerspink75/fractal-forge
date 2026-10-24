@@ -647,7 +647,7 @@ async function runTarget(name, url, evidenceBase) {
       .then(() => true)
       .catch(() => false);
     ok('Auto-grow: tree reaches full growth after selection', grewEnd);
-    await page.waitForTimeout(900); // settle under SwiftShader
+    await page.waitForTimeout(2000); // settle under SwiftShader (slow-runner guard)
     const endFrame = await capture(page, evidenceDir, 'autogrow-tree-end');
     ok(
       'Auto-grow: tree end-state renders a valid frame',
@@ -849,6 +849,10 @@ async function runTarget(name, url, evidenceBase) {
         await page.waitForTimeout(2500); // settle the 3D raymarch
         const before = await page.evaluate(() => ({ pitch: Camera.getPitch(), y: Camera.camPos[1] }));
         await verticalDrag(70);
+        // Settle the *newly pitched* repaint (camera moved after the initial
+        // settle); without this a slow SwiftShader runner can capture an
+        // under-settled frame and dip under the validity floor (flake).
+        await page.waitForTimeout(800);
         const after = await page.evaluate(() => ({ pitch: Camera.getPitch(), y: Camera.camPos[1] }));
         const frame = await capture(page, evidenceDir, 'p2-pitch-' + mode + '-' + seed);
         ok(
