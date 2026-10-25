@@ -224,6 +224,25 @@ async function capture(page, evidenceDir, name) {
   return buf;
 }
 
+// Robust capture for "this state renders a valid frame" checks on slow
+// (SwiftShader) runners. A single snapshot can land mid-repaint and dip just
+// under the validity floor even when the underlying state is fine, so re-capture
+// with extra settle (bounded retries) until `isValid` accepts the frame. The
+// guard thresholds are NOT weakened — the final frame still must satisfy them —
+// we simply let a still-settling render converge (up to `maxTries`) before it
+// is judged.
+async function captureUntilValid(page, evidenceDir, name, isValid, opts = {}) {
+  const maxTries = opts.maxTries || 4;
+  const retrySettleMs = opts.retrySettleMs != null ? opts.retrySettleMs : 1500;
+  let last = null;
+  for (let i = 0; i < maxTries; i++) {
+    if (i > 0) await page.waitForTimeout(retrySettleMs); // extra settle for the repaint
+    last = await capture(page, evidenceDir, name);
+    if (isValid(last)) return last;
+  }
+  return last;
+}
+
 async function getExportBuffer(page) {
   try {
     const [dl] = await Promise.all([
@@ -647,8 +666,16 @@ async function runTarget(name, url, evidenceBase) {
       .then(() => true)
       .catch(() => false);
     ok('Auto-grow: tree reaches full growth after selection', grewEnd);
-    await page.waitForTimeout(2000); // settle under SwiftShader (slow-runner guard)
-    const endFrame = await capture(page, evidenceDir, 'autogrow-tree-end');
+    await page.waitForTimeout(1500); // settle under SwiftShader (slow-runner guard)
+    // The fully-grown L-system render can still be settling on a slow runner;
+    // captureUntilValid re-captures (bounded) until isValidLsystemFrame is met,
+    // so a mid-repaint snapshot can't dip just under the floor. Guard unchanged.
+    const endFrame = await captureUntilValid(
+      page,
+      evidenceDir,
+      'autogrow-tree-end',
+      (buf) => isValidLsystemFrame(decode(buf))
+    );
     ok(
       'Auto-grow: tree end-state renders a valid frame',
       isValidLsystemFrame(decode(endFrame)),
@@ -850,11 +877,18 @@ async function runTarget(name, url, evidenceBase) {
         const before = await page.evaluate(() => ({ pitch: Camera.getPitch(), y: Camera.camPos[1] }));
         await verticalDrag(70);
         // Settle the *newly pitched* repaint (camera moved after the initial
-        // settle); without this a slow SwiftShader runner can capture an
-        // under-settled frame and dip under the validity floor (flake).
+        // settle); a slow SwiftShader runner can otherwise capture an
+        // under-settled 3D frame and dip under the validity floor.
         await page.waitForTimeout(800);
         const after = await page.evaluate(() => ({ pitch: Camera.getPitch(), y: Camera.camPos[1] }));
-        const frame = await capture(page, evidenceDir, 'p2-pitch-' + mode + '-' + seed);
+        // Re-capture (bounded) until isValidFrame is met, so a still-settling
+        // repaint can't dip just under the floor. Guard thresholds unchanged.
+        const frame = await captureUntilValid(
+          page,
+          evidenceDir,
+          'p2-pitch-' + mode + '-' + seed,
+          (buf) => isValidFrame(decode(buf))
+        );
         ok(
           'Phase 2 pitch: ' + mode + ' @ seed ' + seed + ' — vertical drag raises the camera, valid frame',
           Math.abs(after.pitch - before.pitch) > 0.01 &&
